@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           # Silent install OpenMM, should skip cudatoolkit
-          $CONDA/bin/conda install -c conda-forge openmm -y
+          #$CONDA/bin/conda install -c conda-forge openmm -y
 
           # install YAFF manually as conda package is outdated
           git clone https://github.com/molmod/yaff
@@ -33,8 +33,8 @@ jobs:
 
       - name: Install opencmm
         run: |
-          git clone https://github.com/svandenhaute/opencmm
-          cd opencmm
+          #git clone https://github.com/svandenhaute/opencmm
+          #cd opencmm
           python setup.py install
 
       - name: Execute tests
