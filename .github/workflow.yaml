@@ -1,0 +1,29 @@
+name: Python Application
+
+on: [push]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Install dependencies
+        run: |
+          $CONDA/bin/conda env update --file environment.yml --name base
+          # install YAFF manually as conda package is outdated
+          git clone https://github.com/molmod/yaff
+          cd yaff
+          python setup.py install
+          cd ..
+          rm -rf yaff
+          # install opencmm
+          python setup.py install
+
+      - name: Execute tests
+        run: |
+          pytest --pyargs opencmm
