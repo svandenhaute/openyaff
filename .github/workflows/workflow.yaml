@@ -18,7 +18,10 @@ jobs:
           auto-update-conda: true
           python-version: 3.8
           activate-environment: testenv
-          environment-file: environment.yml
+          #environment-file: environment.yml
+        run: |
+          conda activate testenv
+          conda env update --name testenv --file environment.yml
       - name: Install dependencies
         run: |
           # Silent install OpenMM, should skip cudatoolkit
