@@ -17,11 +17,9 @@ jobs:
           auto-update-conda: true
           python-version: 3.8
           activate-environment: testenv
+          environment-file: environment.yml
       - name: Install dependencies
         run: |
-          pwd
-          ls -r
-          $CONDA/bin/conda env update --file ../environment.yml
           # Silent install OpenMM, should skip cudatoolkit
           $CONDA/bin/conda install -c conda-forge openmm -y
 
@@ -31,7 +29,11 @@ jobs:
           python setup.py install
           cd ..
           rm -rf yaff
+
+      - name: Install opencmm
           # install opencmm
+          git clone https://github.com/svandenhaute/opencmm
+          cd opencmm
           python setup.py install
 
       - name: Execute tests
