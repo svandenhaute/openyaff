@@ -15,6 +15,7 @@ jobs:
       - name: Install dependencies
         run: |
           $CONDA/bin/conda env update --file environment.yml --name base
+          $CONDA/bin/conda init bash
           $CONDA/bin/conda activate base
           # Silent install OpenMM, should skip cudatoolkit
           $CONDA/bin/conda install -c conda-forge openmm -y
