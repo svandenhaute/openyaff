@@ -8,7 +8,7 @@ dependencies:
   - blas=1.0=mkl
   - ca-certificates=2020.12.5=ha878542_0
   - certifi=2020.12.5=py38h578d9bd_1
-  - cudatoolkit=11.0.3=h15472ef_6
+    #- cudatoolkit=11.0.3=h15472ef_6
   - cython=0.29.21=py38h2531618_0
   - fftw=3.3.8=nompi_h7f3a6c3_1111
   - h5py=2.10.0=py38hd6299e0_1
@@ -30,7 +30,7 @@ dependencies:
   - numpy-base=1.19.2=py38hfa32c7d_0
   - ocl-icd=2.2.14=h7f98852_0
   - ocl-icd-system=1.0.0=1
-  - openmm=7.5.0=py38hd674aa3_4
+    #- openmm=7.5.0=py38hd674aa3_4
   - openssl=1.1.1i=h7f98852_0
   - pip=20.3.3=py38h06a4308_0
   - python=3.8.5=h7579374_1
