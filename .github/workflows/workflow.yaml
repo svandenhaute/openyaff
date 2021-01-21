@@ -19,6 +19,8 @@ jobs:
           activate-environment: testenv
       - name: Install dependencies
         run: |
+          pwd
+          ls -r
           $CONDA/bin/conda env update --file ../environment.yml
           # Silent install OpenMM, should skip cudatoolkit
           $CONDA/bin/conda install -c conda-forge openmm -y
