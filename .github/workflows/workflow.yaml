@@ -43,4 +43,5 @@ jobs:
       - name: Execute tests
         shell: bash -l {0}
         run: |
+          pip install pytest pytest-cov
           pytest --pyargs opencmm
