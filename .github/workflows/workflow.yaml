@@ -6,17 +6,20 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v2
+      #      - uses: actions/checkout@v2
+      #      - name: Set up Python 3.8
+      #        uses: actions/setup-python@v2
+      #        with:
+      #          python-version: 3.8
+      #
+      - uses: conda-incubator/setup-miniconda@v2
         with:
+          auto-update-conda: true
           python-version: 3.8
-
+          activate-environment: testenv
       - name: Install dependencies
         run: |
-          $CONDA/bin/conda env update --file environment.yml --name base
-          $CONDA/bin/conda init bash
-          $CONDA/bin/conda activate base
+          $CONDA/bin/conda env update --file environment.yml
           # Silent install OpenMM, should skip cudatoolkit
           $CONDA/bin/conda install -c conda-forge openmm -y
 
