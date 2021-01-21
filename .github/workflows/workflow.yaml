@@ -31,7 +31,7 @@ jobs:
           rm -rf yaff
 
       - name: Install opencmm
-          # install opencmm
+        run: |
           git clone https://github.com/svandenhaute/opencmm
           cd opencmm
           python setup.py install
