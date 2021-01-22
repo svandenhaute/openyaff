@@ -43,18 +43,19 @@ def lennardjones(natoms=40, volume=1000):
             ffatype_ids=np.zeros(natoms, dtype=int),
             rvecs=rvecs,
             )
+    # random LJ parameters; SCALE should equal 1.0 as no bonds are defined
     pars = """
-LJ:UNIT SIGMA angstrom
-LJ:UNIT EPSILON kcalmol
-LJ:SCALE 1 1.0
-LJ:SCALE 2 1.0
-LJ:SCALE 3 1.0
+    LJ:UNIT SIGMA angstrom
+    LJ:UNIT EPSILON kcalmol
+    LJ:SCALE 1 1.0
+    LJ:SCALE 2 1.0
+    LJ:SCALE 3 1.0
 
-# ---------------------------------------------
-# KEY      ffatype  SIGMA  EPSILON  ONLYPAULI
-# ---------------------------------------------
+    # ---------------------------------------------
+    # KEY      ffatype  SIGMA  EPSILON  ONLYPAULI
+    # ---------------------------------------------
 
-LJ:PARS      C     2.360   0.116      0"""
+    LJ:PARS      C     2.360   0.116      0"""
     return system, pars
 
 
