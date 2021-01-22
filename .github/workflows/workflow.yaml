@@ -33,7 +33,7 @@ jobs:
           cd ..
           rm -rf yaff
 
-      - name: Install opencmm
+      - name: Install openyaff
         shell: bash -l {0}
         run: |
           conda info
@@ -50,4 +50,4 @@ jobs:
           conda activate testenv
           echo 'TESTMESSAGE'
           pip install pytest pytest-cov
-          pytest --pyargs opencmm
+          pytest --pyargs openyaff
