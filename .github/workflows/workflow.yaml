@@ -36,10 +36,10 @@ jobs:
       - name: Install opencmm
         shell: bash -l {0}
         run: |
-          #git clone https://github.com/svandenhaute/opencmm
-          #cd opencmm
           conda info
           conda list
+          conda activate testenv
+          echo 'TESTMESSAGE'
           python setup.py install
 
       - name: Execute tests
@@ -47,5 +47,7 @@ jobs:
         run: |
           conda info
           conda list
+          conda activate testenv
+          echo 'TESTMESSAGE'
           pip install pytest pytest-cov
           pytest --pyargs opencmm
