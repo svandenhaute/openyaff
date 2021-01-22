@@ -1,0 +1,1 @@
+from openyaff.configuration import Configuration

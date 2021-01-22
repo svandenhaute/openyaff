@@ -5,7 +5,7 @@ setuptools.setup(
         name='openyaff',
         version='0.0.1',
         author='Sander Vandenhaute',
-        packages=setuptools.find_packages(),
+        packages=['openyaff'],
         python_requires='>=3.6',
         entry_points={
             'console_scripts': [
