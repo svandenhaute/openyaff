@@ -1,9 +1,15 @@
 import molmod
 import yaff
 import numpy as np
+from pathlib import Path
 
 
-def lennardjones(natoms=40, volume=1000):
+# specifying absolute path ensures tests may be executed from any directory
+here = Path(__file__).parent
+#here = Path.absolute(Path(__file__))
+
+
+def lennardjones(return_forcefield, natoms=40, volume=1000):
     """Generate lennard jones system
 
     Parameters
@@ -56,11 +62,37 @@ def lennardjones(natoms=40, volume=1000):
     # ---------------------------------------------
 
     LJ:PARS      C     2.360   0.116      0"""
-    return system, pars
+    if return_forcefield:
+        raise NotImplementedError
+    else:
+        return system, pars
+
+
+def cobdp(return_forcefield=False):
+    """Generate CoBDP system from YAFF input files"""
+    print(here)
+    path_system = str(here / 'cobdp' / 'system.chk')
+    path_pars = str(here / 'cobdp' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    if return_forcefield:
+        ff = yaff.ForceField.generate(system, [path_pars])
+        return ff
+    else:
+        with open(path_pars, 'r') as f:
+            pars = path_pars.read()
+        return system, pars
 
 
 def get_system(name, **kwargs):
     if name == 'lennardjones':
-        return lennardjones(**kwargs)
+        return lennardjones(return_forcefield=False, **kwargs)
     else:
         raise NotImplementedError
+
+
+def get_forcefield(name, **kwargs):
+    if name == 'cobdp':
+        return cobdp(return_forcefield=True, **kwargs)
+    else:
+        raise NotImplementedError
+

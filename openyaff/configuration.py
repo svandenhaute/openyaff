@@ -1,7 +1,8 @@
 import logging
 import tempfile
-import configparser
 import yaff
+
+from configparser import ConfigParser
 
 
 logger = logging.getLogger(__name__) # logging per module
@@ -13,32 +14,16 @@ class Configuration:
     Class attributes
     ----------------
 
-    yaff_defaults : dict
-        loads the default settings of the force field generator in YAFF
-
-    supported_config_entries : list of str
-        enumerates allowed keys in the YAFF section of the config
+    config_layout : dict
 
     """
-    yaff_defaults = {
-            'rcut': yaff.FFArgs().rcut,
-            'alpha_scale': yaff.FFArgs().alpha_scale,
-            'gcut_scale': yaff.FFArgs().gcut_scale,
-            'skin': yaff.FFArgs().skin,
-            'smooth_ei': yaff.FFArgs().smooth_ei,
-            'reci_ei': yaff.FFArgs().reci_ei,
-            'nlow': yaff.FFArgs().nlow,
-            'nhigh': yaff.FFArgs().nhigh,
-            'tailcorrections': yaff.FFArgs().tailcorrections,
+    config_layout = { # specifies properties and their locations in config
+            'rcut': ('yaff', 'rcut'),
+            'tailcorrections': ('yaff', 'tailcorrections'),
+            'ewald_parameters': ('yaff', 'ewald_parameters'),
             }
-    supported_config_entries = [
-            'rcut',             # cutoff radius of real space ei and dispersion
-            'supercell',        # supercell to use
-            'tailcorrections',  # tailcorrections for dispersion
-            #'ewald_params',     # parameters of ewald summation
-            ]
 
-    def __init__(self, system, pars, config=None):
+    def __init__(self, system, pars):
         """Constructor
 
         Parameters
@@ -49,9 +34,6 @@ class Configuration:
 
         pars : str
             string containing the contents of a YAFF force field parameters file
-
-        config : ConfigParser, optional
-            contains existing configuration
 
         """
         # sanity check to ensure force field is nonempty
@@ -64,67 +46,100 @@ class Configuration:
 
         self.forcefield = ff
         self.parameters = parameters
+        self.periodic   = (ff.system.cell._get_nvec() == 3)
+        self.prefixes = [key for key, _ in parameters.sections.items()]
 
-        # generate default config for this system
-        default_config = configparser.ConfigParser()
-        part_names = [part.name for part in ff.parts]
-        prefixes   = [key for key, _ in parameters.sections.items()]
-        if ('MM3' in prefixes) or ('LJ' in prefixes):
-            self.set_rcut(default_config)
-            self.set_tailcorrections(default_config)
-        if ('FIXQ' in prefixes) and (ff.system.cell._get_nvec() == 3):
-            self.set_ewald_parameters(default_config)
-
+        # use setters to initialize properties to default YAFF values or None
+        self.rcut = yaff.FFArgs().rcut
+        self.tailcorrections = yaff.FFArgs().tailcorrections
+        self.ewald_parameters = (
+                yaff.FFArgs().alpha_scale,
+                yaff.FFArgs().gcut_scale,
+                )
 
         # TODO
-        # list of force parts -> generate force fields for each separately
-        # inspect force field and determine which options are appropriate
         # save .ini file
-        # cell alignment options with supercell
         # create system, ffargs for force field generation
         # evaluate method
 
-    def set_rcut(self, config):
-        """Adds entries for rcut and supercell settings
+    @property
+    def rcut(self):
+        """Returns rcut in angstrom"""
+        return self._rcut
+
+    @rcut.setter
+    def rcut(self, value):
+        # rcut applicable only to nonbonded force parts:
+        if (('MM3' in self.prefixes) or ('LJ' in self.prefixes)  or
+            ('FIXQ' in self.prefixes)):
+            assert type(value) == float
+            self._rcut = value
+            return True
+        else: # property not applicable
+            self._rcut = None
+            return False
+
+    @property
+    def tailcorrections(self):
+        """Returns whether tailcorrections are enabled"""
+        return self._tailcorrections
+
+    @tailcorrections.setter
+    def tailcorrections(self, value):
+        # tailcorrections apply only to dispersion nonbonded force parts:
+        if ('MM3' in self.prefixes or 'LJ' in self.prefixes):
+            assert type(value) == bool
+            self._tailcorrections = value
+            return True
+        else: # property not applicable
+            self._tailcorrections = None
+            return False
+
+    @property
+    def ewald_parameters(self):
+        """Returns ewald parameters (alpha_scale, gcut_scale)"""
+        return self._ewald_parameters
+
+    @ewald_parameters.setter
+    def ewald_parameters(self, value):
+        # ewald parameters apply only to periodic systems with electrostatics
+        if 'FIXQ' in self.prefixes and self.periodic:
+            assert len(value) == 2 # value is tuple of (alpha, gcut)
+            self._ewald_parameters = value
+        else:
+            self._ewald_parameters = None
+            return False
+
+    def determine_supercell(self, rcut):
+        """Determines the smallest supercell for which rcut is possible
 
         Since OpenMM does not allow particles to interact with their
         periodic copies, the maximum allowed interaction range (often equal to
         cutoff range of the nonbonded interactions) is determined by the cell
-        geometry. This evaluates the current cell and its supercells to compute
+        geometry. This evaluates the current cell and supercells to compute
         the maximum allowed rcut for each option.
 
         Parameters
         ----------
 
-        config : ConfigParser
-            config parser for which to add this option
+        rcut : float
+            desired cutoff radius
 
         """
-        pass
-
-    def set_tailcorrections(self, default_config):
-        """Adds entry to enable tail corrections (default: off)
-
-        Parameters
-        ----------
-
-        config : ConfigParser
-            config parser for which to add this option
-
-        """
-        pass
-
-    def set_ewald_parameters(self, default_config):
-        """Adds entry for ewald summation parameters
-
-        Parameters
-        ----------
-
-        config : ConfigParser
-            config parser for which to add this option
-
-        """
-        pass
+        rvecs = self.forcefield.system.cell._get_rvecs()
+        current_rcut = 0
+        i, j, k = (1, 1, 1)
+        while k < 10: # c vector is last to increase
+            while j < 10: # b vector second to increase
+                while i < 10: # a vector first to increase
+                    while current_rcut < rcut:
+                        supercell = (i, j, k)
+                        rvecs_ = np.array(supercell)[:, np.newaxis] * rvecs
+                        try:
+                            current_rcut = determine_rcut(reduced)
+                        except ValueError:
+                            pass # invalid box vectors, move on to next
+        return supercell
 
 
     def log(self):
@@ -141,6 +156,7 @@ class Configuration:
             specifies the location of the output .ini file
 
         """
+        config = ConfigParser()
         with open(path_config, 'w') as f:
             f.write(self.config)
 
