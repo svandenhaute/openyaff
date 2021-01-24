@@ -1,8 +1,11 @@
 import logging
 import tempfile
 import yaff
+import molmod
 
 from configparser import ConfigParser
+
+from openyaff.utils import determine_rcut
 
 
 logger = logging.getLogger(__name__) # logging per module
@@ -49,13 +52,23 @@ class Configuration:
         self.periodic   = (ff.system.cell._get_nvec() == 3)
         self.prefixes = [key for key, _ in parameters.sections.items()]
 
-        # use setters to initialize properties to default YAFF values or None
-        self.rcut = yaff.FFArgs().rcut
-        self.tailcorrections = yaff.FFArgs().tailcorrections
-        self.ewald_parameters = (
-                yaff.FFArgs().alpha_scale,
-                yaff.FFArgs().gcut_scale,
-                )
+        # use setters to initialize properties to default YAFF values
+        # if properties are not applicable, they are initialized to None
+        try:
+            self.rcut = yaff.FFArgs().rcut / molmod.units.angstrom
+        except ValueError:
+            pass
+
+        try:
+            self.tailcorrections = yaff.FFArgs().tailcorrections
+        except ValueError:
+            pass
+
+        try:
+            self.ewald_parameters = (yaff.FFArgs().alpha_scale,
+                    yaff.FFArgs().gcut_scale)
+        except ValueError:
+            pass
 
         # TODO
         # save .ini file
@@ -69,6 +82,17 @@ class Configuration:
 
     @rcut.setter
     def rcut(self, value):
+        """Sets the rcut parameter
+
+        A ValueError is raised if no nonbonded interactions are found
+
+        Parameters
+        ----------
+
+        value : float [angstrom]
+            desired cutoff radius
+
+        """
         # rcut applicable only to nonbonded force parts:
         if (('MM3' in self.prefixes) or ('LJ' in self.prefixes)  or
             ('FIXQ' in self.prefixes)):
@@ -77,7 +101,7 @@ class Configuration:
             return True
         else: # property not applicable
             self._rcut = None
-            return False
+            raise ValueError('Cannot set rcut for this system')
 
     @property
     def tailcorrections(self):
@@ -86,6 +110,17 @@ class Configuration:
 
     @tailcorrections.setter
     def tailcorrections(self, value):
+        """Sets the tailcorrections parameter
+
+        A ValueError is raised if no dispersion nonbonded interactions are found
+
+        Parameters
+        ----------
+
+        value : bool
+            enables or disables tail corrections
+
+        """
         # tailcorrections apply only to dispersion nonbonded force parts:
         if ('MM3' in self.prefixes or 'LJ' in self.prefixes):
             assert type(value) == bool
@@ -93,7 +128,7 @@ class Configuration:
             return True
         else: # property not applicable
             self._tailcorrections = None
-            return False
+            raise ValueError('Cannot set tailcorrections for this system')
 
     @property
     def ewald_parameters(self):
@@ -102,13 +137,24 @@ class Configuration:
 
     @ewald_parameters.setter
     def ewald_parameters(self, value):
+        """Sets the ewald parameters
+
+        A ValueError is raised if no Ewald sum is present in the force field
+
+        Parameters
+        ----------
+
+        value : tuple of float
+            tuple of floats (alpha_scale, gcut_scale)
+
+        """
         # ewald parameters apply only to periodic systems with electrostatics
         if 'FIXQ' in self.prefixes and self.periodic:
             assert len(value) == 2 # value is tuple of (alpha, gcut)
             self._ewald_parameters = value
         else:
             self._ewald_parameters = None
-            return False
+            raise ValueError('Cannot set ewald parameters for this system')
 
     def determine_supercell(self, rcut):
         """Determines the smallest supercell for which rcut is possible
@@ -146,19 +192,31 @@ class Configuration:
         """Logs information about this configuration"""
         pass
 
-    def write(self):
+    def write(self, path_config=None):
         """Generates the .ini contents and optionally saves it to a file
 
         Parameters
         ----------
 
-        path_config : pathlib.Path
+        path_config : pathlib.Path, optional
             specifies the location of the output .ini file
 
         """
         config = ConfigParser()
-        with open(path_config, 'w') as f:
-            f.write(self.config)
+        for name, location in self.config_layout.items():
+            assert len(location) == 2 # no nested ini
+            config[location[0]] = {} # initialize dicts
+        for name, location in self.config_layout.items():
+            value = getattr(self, name)
+            if value is not None: # if property is applicable
+                config[location[0]][location[1]] = str(value)
+
+        if path_config is not None:
+            assert path_config.suffix == '.ini'
+            with open(path_config, 'w') as f:
+                config.write(f)
+        return config
+
 
     @staticmethod
     def from_files(path_system, path_pars):

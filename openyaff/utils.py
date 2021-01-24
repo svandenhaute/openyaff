@@ -36,7 +36,7 @@ def determine_rcut(rvecs):
         (3, 3) array with box vectors as rows
 
     """
-    if not validate_reduced_form(rvecs):
+    if not check_reduced_form(rvecs):
         raise ValueError('Box vectors are not in reduced form')
     else:
         return np.min(
