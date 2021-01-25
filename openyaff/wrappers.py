@@ -1,5 +1,9 @@
 import molmod
 import numpy as np
+import simtk.unit as unit
+import simtk.openmm as mm
+
+from openyaff.utils import yaff_generate
 
 
 class ForceFieldWrapper:
@@ -9,7 +13,7 @@ class ForceFieldWrapper:
 
     """
     def __init__(self, periodic):
-        pass
+        self.periodic = periodic
 
     def evaluate(self, positions, rvecs=None, do_forces=True):
         """Computes energy, forces and stress if available
@@ -41,22 +45,26 @@ class ForceFieldWrapper:
             forces over trajectory (or state)
 
         """
-        if self.is_periodic:
+        if self.periodic:
             assert rvecs is not None
             assert len(positions.shape) == len(rvecs.shape)
         else:
             assert rvecs is None
         if len(positions.shape) == 2:
-            return _internal_evaluate(positions, rvecs, do_forces)
+            return self._internal_evaluate(positions, rvecs, do_forces)
         else:
             nstates, natoms = positions.shape[:2]
             energy = np.zeros(nstates)
             if do_forces:
                 forces = np.zeros((nstates, natoms, 3))
             for i in range(positions.shape[0]):
+                if self.periodic:
+                    rvecs_ = rvecs[i]
+                else:
+                    rvecs_ = None
                 energy[i], f = self._internal_evaluate(
-                        positions,
-                        rvecs,
+                        positions[i],
+                        rvecs_,
                         do_forces,
                         )
                 if do_forces:
@@ -73,9 +81,14 @@ class ForceFieldWrapper:
     def _internal_evaluate(self, positions, rvecs, do_forces):
         raise NotImplementedError
 
+    @classmethod
+    def from_seed(cls, seed):
+        """Generates the wrapper from a seed"""
+        raise NotImplementedError
 
-class YAFFWrapper(ForceFieldWrapper):
-    """Wrapper for a yaff.ForceField object"""
+
+class YaffForceFieldWrapper(ForceFieldWrapper):
+    """Wrapper for Yaff force field evaluations"""
 
     def __init__(self, ff):
         """Constructor
@@ -87,11 +100,12 @@ class YAFFWrapper(ForceFieldWrapper):
             force field used to evaluate energies
 
         """
-        is_periodic = not (ff.system.cell is None)
-        super().__init__(is_periodic)
-        if is_periodic: # currently only supports 3D periodic systems
-            assert ff.system.cell._get_nvec() == 3
+        periodic = not (ff.system.cell.nvec == 0)
+        if periodic:
+            # does not support 1D or 2D periodicity
+            assert ff.system.cell.nvec == 3
         self.ff = ff
+        super().__init__(periodic)
 
     def _internal_evaluate(self, positions, rvecs, do_forces):
         """Wraps call to ff.compute()
@@ -119,7 +133,8 @@ class YAFFWrapper(ForceFieldWrapper):
 
         """
         self.ff.update_pos(positions * molmod.units.angstrom)
-        self.ff.update_rvecs(rvecs * molmod.units.angstrom)
+        if rvecs is not None:
+            self.ff.update_rvecs(rvecs * molmod.units.angstrom)
         if do_forces:
             gpos = np.zeros(positions.shape)
         else:
@@ -127,6 +142,89 @@ class YAFFWrapper(ForceFieldWrapper):
         energy = self.ff.compute(gpos=gpos, vtens=None)
         energy /= molmod.units.kjmol
         if do_forces:
-            return energy, forces / molmod.units.kjmol * molmod.units.angstrom
+            return energy, -gpos / molmod.units.kjmol * molmod.units.angstrom
         else:
             return energy
+
+    @classmethod
+    def from_seed(cls, seed):
+        """Generates wrapper from a seed
+
+        Parameters
+        ----------
+
+        seed : tuple of (yaff.System, yaff.Parameters, yaff.FFArgs)
+            seed for the yaff force field wrapper
+
+        """
+        ff = yaff_generate(seed)
+        return cls(ff)
+
+
+class OpenMMForceFieldWrapper(ForceFieldWrapper):
+    """Wrapper for OpenMM force evaluations"""
+
+    def __init__(self, system_mm, platform_name):
+        """Constructor
+
+        Parameters
+        ----------
+
+        system_mm : mm.System
+            OpenMM System object containing all Force objects
+
+        platform_name : str
+            OpenMM platform on which the computations should be performed.
+
+        """
+        self.periodic = system_mm.usesPeriodicBoundaryConditions()
+        # integrator is necessary to create context
+        integrator = mm.VerletIntegrator(0.5 * unit.femtosecond)
+        platform = mm.Platform.getPlatformByName(platform_name)
+        self.context = mm.Context(system_mm, integrator, platform)
+
+    def _internal_evaluate(self, positions, rvecs, do_forces):
+        """Computes energy and forces
+
+        Positions (and optionally box vectors) are updated in the context,
+        and get state is called to obtain energy and forces
+
+        """
+        self.context.setPositions(positions * unit.angstrom)
+        if self.periodic:
+            self.context.setPeriodicBoxVectors(
+                    rvecs[0, :] * unit.angstrom,
+                    rvecs[1, :] * unit.angstrom,
+                    rvecs[2, :] * unit.angstrom,
+                    )
+        state = self.context.getState(
+                getEnergy=True,
+                getForces=do_forces,
+                enforcePeriodicBox=True,
+                )
+        energy = state.getPotentialEnergy().in_units_of(unit.kilojoule_per_mole)
+        energy_ = energy.value_in_unit(energy.unit)
+        if not do_forces:
+            return energy_
+        else:
+            forces = state.getForces()
+            forces_ = forces.value_in_unit(unit.kilojoule_per_mole / unit.angstrom)
+            return energy_, forces_
+
+    @classmethod
+    def from_seed(cls, seed, platform_name):
+        """Generates wrapper from OpenMM seed
+
+        Parameters
+        ----------
+
+        seed : tuple of (mm.System,)
+            seed for the OpenMM force field wrapper. For now, this is simply an
+            OpenMM system object in which all forces are added by an
+            openyaff.ExplicitConversion.apply() call.
+
+        platform_name : str
+            OpenMM platform on which the computations should be performed.
+
+        """
+        return cls(seed.system_mm, platform_name)

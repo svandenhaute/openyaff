@@ -6,6 +6,7 @@ import yaml
 import numpy as np
 
 from openyaff.utils import determine_rcut, transform_lower_diagonal
+from openyaff.seeds import YaffSeed
 
 
 logger = logging.getLogger(__name__) # logging per module
@@ -140,11 +141,10 @@ class Configuration:
 
         # construct FFArgs instance and set properties
         ff_args = yaff.FFArgs()
-        if not self.periodic:
-            system = self.system
+        if self.periodic and tuple(self.supercell) != (1, 1, 1):
+            system = self.system.supercell(*self.supercell)
         else:
-            if tuple(self.supercell) != (1, 1, 1): # define system object
-                system = self.system.supercell(*self.supercell)
+            system = self.system
 
         if self.rcut is not None:
             ff_args.rcut = self.rcut * molmod.units.angstrom
@@ -160,8 +160,7 @@ class Configuration:
 
         if self.ewald_gcutscale is not None:
             ff_args.gcut_scale = self.ewald_gcutscale
-        return (system, parameters, ff_args)
-
+        return YaffSeed(system, parameters, ff_args)
 
     def determine_supercell(self, rcut):
         """Determines the smallest supercell for which rcut is possible

@@ -1,5 +1,8 @@
 import yaff
+import molmod
 import numpy as np
+import simtk.unit as unit
+import simtk.openmm as mm
 
 
 def check_reduced_form(rvecs):
@@ -85,12 +88,47 @@ def yaff_generate(seed):
     Parameters
     ----------
 
-    seed : tuple of (yaff.System, yaff.Parameters, yaff.FFArgs)
-        seed for the force field
+    seed : openyaff.YaffSeed
+        seed for the yaff force field wrapper
 
     """
-    yaff.apply_generators(*seed)
-    ff_args = seed[2]
-    system = seed[0]
+    system = seed.system
+    parameters = seed.parameters
+    ff_args = seed.ff_args
+    yaff.apply_generators(system, parameters, ff_args)
     return yaff.ForceField(system, ff_args.parts, ff_args.nlist)
 
+
+#def openmm_generate(seed)
+#    """Generates a yaff.ForceField instance based on a seed
+#
+#    Parameters
+#    ----------
+#
+#    seed : tuple of (mm.System,)
+#        seed for the OpenMM force field wrapper. For now, this is simply an
+#        OpenMM system object in which all forces are added by an
+#        openyaff.ExplicitConversion.apply() call.
+#
+#    """
+#    pass
+
+
+def create_openmm_system(system):
+    """Creates an OpenMM system object from a yaff.System object
+
+    Parameters
+    ----------
+
+    system : yaff.System
+        yaff System for which to generate an OpenMM variant
+
+    """
+    system.set_standard_masses()
+    system_mm = mm.System()
+    if system.cell.nvec == 3:
+        rvecs = system.cell._get_rvecs() / molmod.units.angstrom / 10.0 * unit.nanometer
+        system_mm.setDefaultPeriodicBoxVectors(*rvecs)
+    for i in range(system.pos.shape[0]):
+        system_mm.addParticle(system.masses[i] / molmod.units.amu * unit.dalton)
+    return system_mm
