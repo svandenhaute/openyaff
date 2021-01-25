@@ -1,3 +1,4 @@
+import yaff
 import numpy as np
 
 
@@ -71,3 +72,25 @@ def transform_lower_diagonal(pos, rvecs):
     rvecs[0, 1] = 0
     rvecs[0, 2] = 0
     rvecs[1, 2] = 0
+
+
+def compute_lengths_angles(rvecs):
+    """Computes and returns the box vector lengths and angles"""
+    raise NotImplementedError
+
+
+def yaff_generate(seed):
+    """Generates a yaff.ForceField instance based on a seed
+
+    Parameters
+    ----------
+
+    seed : tuple of (yaff.System, yaff.Parameters, yaff.FFArgs)
+        seed for the force field
+
+    """
+    yaff.apply_generators(*seed)
+    ff_args = seed[2]
+    system = seed[0]
+    return yaff.ForceField(system, ff_args.parts, ff_args.nlist)
+

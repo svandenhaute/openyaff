@@ -62,14 +62,115 @@ class Configuration:
         # if properties are not applicable, they are initialized to None
         self.initialize_properties()
 
+    def create_seed(self, kind='full'):
+        """Creates a seed for constructing a yaff.ForceField object
+
+        The returned seed contains all objects that are required in order to
+        generate the force field object unambiguously. Specifically, this
+        involves a yaff.System object, a yaff.FFArgs object with the correct
+        parameter settings, and a yaff.Parameters object that contains the
+        actual force field parameters.
+        Because tests are typically performed on isolated parts of a force
+        field, it is possible to generate different seeds corresponding
+        to different parts -- this is done using the kind parameter. Allowed
+        values are:
+
+                - full:
+                    generates the entire force field
+
+                - covalent
+                    generates only the covalent part of the force field.
+
+                - nonbonded
+                    generates only the nonbonded part of the force field,
+                    including both dispersion and electrostatics.
+
+                - dispersion
+                    generates only the dispersion part of the force field,
+                    which is basically the nonbonded part minus the
+                    electrostatics.
+
+                - electrostatic
+                    generates only the electrostatic part
+
+        Parameters
+        ----------
+
+        kind : str, optional
+            specifies the kind of seed to be created. Allowed values are
+            'full', 'covalent', 'nonbonded', 'dispersion', 'electrostatic'
+
+        """
+        assert kind in ['full', 'covalent', 'nonbonded', 'dispersion', 'electrostatic']
+        dispersion_prefixes    = ['MM3', 'LJ']
+        electrostatic_prefixes = ['FIXQ']
+        parameters = self.parameters.copy()
+        if kind == 'full':
+            pass # do nothing, all prefixes should be retained
+        elif kind == 'covalent':
+            # pop all dispersion and electrostatic prefixes:
+            for key in (dispersion_prefixes + electrostatic_prefixes):
+                parameters.sections.pop(key, None) # returns None if not present
+        elif kind == 'nonbonded':
+            # retain only dispersion and electrostatic prefixes
+            sections = {}
+            for key in (dispersion_prefixes + electrostatic_prefixes):
+                section = parameters.sections.get(key, None)
+                if section is not None: # only add if present
+                    sections[key] = section
+            parameters = yaff.Parameters(sections)
+        elif kind == 'dispersion':
+            # retain only dispersion
+            sections = {}
+            for key in dispersion_prefixes:
+                section = parameters.sections.get(key, None)
+                if section is not None: # only add if present
+                    sections[key] = section
+            parameters = yaff.Parameters(sections)
+        elif kind == 'electrostatic':
+            # retain only dispersion
+            sections = {}
+            for key in electrostatic_prefixes:
+                section = parameters.sections.get(key, None)
+                if section is not None: # only add if present
+                    sections[key] = section
+            parameters = yaff.Parameters(sections)
+        else:
+            raise NotImplementedError(kind + ' not known.')
+
+        # construct FFArgs instance and set properties
+        ff_args = yaff.FFArgs()
+        if not self.periodic:
+            system = self.system
+        else:
+            if tuple(self.supercell) != (1, 1, 1): # define system object
+                system = self.system.supercell(*self.supercell)
+
+        if self.rcut is not None:
+            ff_args.rcut = self.rcut * molmod.units.angstrom
+
+        if self.switch_width is not None:
+            ff_args.tr = yaff.Switch3(self.switch_width * molmod.units.angstrom)
+
+        if self.tailcorrections is not None:
+            ff_args.tailcorrections = self.tailcorrections
+
+        if self.ewald_alphascale is not None:
+            ff_args.alpha_scale = self.ewald_alphascale
+
+        if self.ewald_gcutscale is not None:
+            ff_args.gcut_scale = self.ewald_gcutscale
+        return (system, parameters, ff_args)
+
+
     def determine_supercell(self, rcut):
         """Determines the smallest supercell for which rcut is possible
 
         Since OpenMM does not allow particles to interact with their
         periodic copies, the maximum allowed interaction range (often equal to
-        cutoff range of the nonbonded interactions) is determined by the cell
-        geometry. This evaluates the current cell and supercells to compute
-        the maximum allowed rcut for each option.
+        the cutoff range of the nonbonded interactions) is determined by the
+        cell geometry. This function inspects the unit cell and supercells
+        of the system to compute the maximum allowed rcut for each option.
 
         Parameters
         ----------
@@ -149,7 +250,7 @@ class Configuration:
         # load system and generate generic force field
         system = yaff.System.from_file(str(path_system))
         with open(path_pars, 'r') as f:
-            pars = path_pars.read()
+            pars = f.read()
         configuration = Configuration(system, pars)
 
         if path_config: # loads .yml contents and calls update_properties()
