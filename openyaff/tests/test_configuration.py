@@ -32,11 +32,11 @@ def test_nonperiodic(tmp_path):
     config = configuration.write(path_config)
     with open(path_config, 'r') as f:
         content = f.read()
-    assert content == """yaff: {rcut: 10.0, switch_width: 4.0}\n"""
+    assert content == """yaff: {}\n"""
 
 
 def test_update_properties(tmp_path):
-    system, pars = get_system('alanine')
+    system, pars = get_system('cobdp')
     configuration = Configuration(system, pars)
 
     config = configuration.write()
@@ -105,10 +105,9 @@ def test_create_seed_periodic():
             )
 
 
-def test_create_seed_periodic():
+def test_create_seed_nonperiodic():
     system, pars = get_system('alanine')
     configuration = Configuration(system, pars)
-    configuration.rcut = 12.0
 
     seed_covalent = configuration.create_seed(kind='covalent')
     ff = yaff_generate(seed_covalent)

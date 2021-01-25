@@ -148,9 +148,13 @@ class Configuration:
 
         if self.rcut is not None:
             ff_args.rcut = self.rcut * molmod.units.angstrom
+        else:
+            ff_args.rcut = 1e10 # humongous value; for nonperiodic systems
 
-        if self.switch_width is not None:
+        if self.switch_width is not None and (self.switch_width != 0.0):
             ff_args.tr = yaff.Switch3(self.switch_width * molmod.units.angstrom)
+        else:
+            ff_args.tr = None
 
         if self.tailcorrections is not None:
             ff_args.tailcorrections = self.tailcorrections
@@ -337,8 +341,10 @@ class Configuration:
 
         """
         # rcut applicable only to nonbonded force parts:
-        if (('MM3' in self.prefixes) or ('LJ' in self.prefixes)  or
-            ('FIXQ' in self.prefixes)):
+        if (self.periodic and (
+            ('MM3' in self.prefixes) or
+            ('LJ' in self.prefixes)  or
+            ('FIXQ' in self.prefixes))):
             assert type(value) == float
             self._rcut = value
             return True
@@ -356,7 +362,7 @@ class Configuration:
     def switch_width(self, value):
         """Sets the width of the switching function
 
-        A ValueError is raised if no nonbonded interactions are found
+        A ValueError is raised if no nonbonded interactions are found.
 
         Parameters
         ----------
@@ -366,7 +372,9 @@ class Configuration:
             cutoff. (YAFF default value is 4 angstrom)
 
         """
-        if ('MM3' in self.prefixes) or ('LJ' in self.prefixes):
+        if (self.periodic and (
+            ('MM3' in self.prefixes) or
+            ('LJ' in self.prefixes))):
             assert type(value) == float
             self._switch_width = value
             return True

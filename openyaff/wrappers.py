@@ -197,6 +197,7 @@ class OpenMMForceFieldWrapper(ForceFieldWrapper):
                     rvecs[1, :] * unit.angstrom,
                     rvecs[2, :] * unit.angstrom,
                     )
+        #self.context.reinitialize(preserveState=True)
         state = self.context.getState(
                 getEnergy=True,
                 getForces=do_forces,
