@@ -1,15 +1,15 @@
 import molmod
 import yaff
+import tempfile
 import numpy as np
 from pathlib import Path
 
 
 # specifying absolute path ensures tests may be executed from any directory
 here = Path(__file__).parent
-#here = Path.absolute(Path(__file__))
 
 
-def lennardjones(return_forcefield, natoms=40, volume=1000):
+def lennardjones(natoms=40, volume=1000):
     """Generate lennard jones system
 
     Parameters
@@ -62,37 +62,44 @@ def lennardjones(return_forcefield, natoms=40, volume=1000):
     # ---------------------------------------------
 
     LJ:PARS      C     2.360   0.116      0"""
-    if return_forcefield:
-        raise NotImplementedError
-    else:
-        return system, pars
+    return system, pars
 
 
 def cobdp(return_forcefield=False):
     """Generate CoBDP system from YAFF input files"""
-    print(here)
     path_system = str(here / 'cobdp' / 'system.chk')
     path_pars = str(here / 'cobdp' / 'pars.txt')
     system = yaff.System.from_file(path_system)
-    if return_forcefield:
-        ff = yaff.ForceField.generate(system, [path_pars])
-        return ff
-    else:
-        with open(path_pars, 'r') as f:
-            pars = path_pars.read()
-        return system, pars
+    with open(path_pars, 'r') as f:
+        pars = f.read()
+    return system, pars
 
 
-def get_system(name, **kwargs):
+def alanine(return_forcefield=False):
+    path_system = str(here / 'alanine' / 'system.chk')
+    path_pars = str(here / 'alanine' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    with open(path_pars, 'r') as f:
+        pars = f.read()
+    return system, pars
+
+
+def get_system(name, return_forcefield=False, **kwargs):
     if name == 'lennardjones':
-        return lennardjones(return_forcefield=False, **kwargs)
+        system, pars = lennardjones(**kwargs)
+    elif name == 'cobdp':
+        system, pars = cobdp(**kwargs)
+    elif name == 'alanine':
+        system, pars = alanine(**kwargs)
     else:
         raise NotImplementedError
 
-
-def get_forcefield(name, **kwargs):
-    if name == 'cobdp':
-        return cobdp(return_forcefield=True, **kwargs)
+    if return_forcefield: # return force field
+        with tempfile.NamedTemporaryFile(delete=False, mode='w+') as tf:
+            tf.write(pars)
+        tf.close()
+        parameters = yaff.Parameters.from_file(tf.name)
+        forcefield = yaff.ForceField.generate(system, parameters)
+        return forcefield
     else:
-        raise NotImplementedError
-
+        return system, pars

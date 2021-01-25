@@ -39,11 +39,11 @@ def determine_rcut(rvecs):
     if not check_reduced_form(rvecs):
         raise ValueError('Box vectors are not in reduced form')
     else:
-        return np.min(
-                reduced[0, 0],
-                reduced[1, 1],
-                reduced[2, 2],
-                ) / 2
+        return min([
+                rvecs[0, 0],
+                rvecs[1, 1],
+                rvecs[2, 2],
+                ]) / 2
 
 
 def transform_lower_diagonal(pos, rvecs):
@@ -68,3 +68,6 @@ def transform_lower_diagonal(pos, rvecs):
     pos[:]   = pos @ rotation
     rvecs[:] = rvecs @ rotation
     assert np.allclose(rvecs, np.linalg.cholesky(rvecs @ rvecs.T))
+    rvecs[0, 1] = 0
+    rvecs[0, 2] = 0
+    rvecs[1, 2] = 0

@@ -2,10 +2,10 @@ import logging
 import tempfile
 import yaff
 import molmod
+import yaml
+import numpy as np
 
-from configparser import ConfigParser
-
-from openyaff.utils import determine_rcut
+from openyaff.utils import determine_rcut, transform_lower_diagonal
 
 
 logger = logging.getLogger(__name__) # logging per module
@@ -17,14 +17,18 @@ class Configuration:
     Class attributes
     ----------------
 
-    config_layout : dict
+    properties : list of str
+        list of all supported properties
 
     """
-    config_layout = { # specifies properties and their locations in config
-            'rcut': ('yaff', 'rcut'),
-            'tailcorrections': ('yaff', 'tailcorrections'),
-            'ewald_parameters': ('yaff', 'ewald_parameters'),
-            }
+    properties = [
+            'supercell',
+            'rcut',
+            'switch_width',
+            'tailcorrections',
+            'ewald_alphascale',
+            'ewald_gcutscale',
+            ]
 
     def __init__(self, system, pars):
         """Constructor
@@ -39,23 +43,135 @@ class Configuration:
             string containing the contents of a YAFF force field parameters file
 
         """
-        # sanity check to ensure force field is nonempty
+        self.periodic = (system.cell._get_nvec() == 3)
+        if self.periodic: # transform system rvecs to lower diagonal form
+            rvecs = system.cell._get_rvecs().copy()
+            transform_lower_diagonal(system.pos, rvecs)
+            system.cell.update_rvecs(rvecs)
+        self.system = system
+
+        # generate parameters object to keep track of prefixes 
         with tempfile.NamedTemporaryFile(delete=False, mode='w+') as tf:
             tf.write(pars)
         tf.close()
         parameters = yaff.Parameters.from_file(tf.name)
-        ff = yaff.ForceField.generate(system, parameters)
-        assert ff.compute() != 0.0
-
-        self.forcefield = ff
         self.parameters = parameters
-        self.periodic   = (ff.system.cell._get_nvec() == 3)
         self.prefixes = [key for key, _ in parameters.sections.items()]
 
         # use setters to initialize properties to default YAFF values
         # if properties are not applicable, they are initialized to None
+        self.initialize_properties()
+
+    def determine_supercell(self, rcut):
+        """Determines the smallest supercell for which rcut is possible
+
+        Since OpenMM does not allow particles to interact with their
+        periodic copies, the maximum allowed interaction range (often equal to
+        cutoff range of the nonbonded interactions) is determined by the cell
+        geometry. This evaluates the current cell and supercells to compute
+        the maximum allowed rcut for each option.
+
+        Parameters
+        ----------
+
+        rcut : float [angstrom]
+            desired cutoff radius
+
+        """
+        rcut *= molmod.units.angstrom
+        rvecs = self.system.cell._get_rvecs()
+        current_rcut = 0
+        i, j, k = (1, 1, 1)
+        while (k < 20) and (current_rcut < rcut): # c vector is last
+            j = 1
+            while (j < 20) and (current_rcut < rcut): # b vector second 
+                i = 1
+                while (i < 20) and (current_rcut < rcut): # a vector first
+                    supercell = (i, j, k)
+                    rvecs_ = np.array(supercell)[:, np.newaxis] * rvecs
+                    try:
+                        current_rcut = determine_rcut(rvecs_)
+                    except ValueError:
+                        pass # invalid box vectors, move on to next
+                    i += 1
+                j += 1
+            k += 1
+        return supercell
+
+    def log(self):
+        """Logs information about this configuration"""
+        pass
+
+    def write(self, path_config=None):
+        """Generates the .yml contents and optionally saves it to a file
+
+        Parameters
+        ----------
+
+        path_config : pathlib.Path, optional
+            specifies the location of the output .yml file
+
+        """
+        config = { # initialize config with yaff section
+                'yaff': {},
+                }
+        for name in self.properties:
+            value = getattr(self, name)
+            if value is not None: # if property is applicable
+                config['yaff'][name] = value
+
+        if path_config is not None:
+            assert path_config.suffix == '.yml'
+            with open(path_config, 'w') as f:
+                yaml.dump(config, f, default_flow_style=None)
+        return config
+
+    @staticmethod
+    def from_files(path_system, path_pars, path_config=None):
+        """Constructs a Configuration based on system and parameter files
+
+        If, optionally, a config .yml file is specified, than the settings in
+        that file are verified and loaded into the newly created object
+
+        Parameters
+        ----------
+
+        path_system : pathlib.Path
+            specifies the location of the YAFF .chk file
+
+        path_pars : pathlib.Path
+            specifies the location of the force field parameters .txt file
+
+        path_config : pathlib.Path, optional
+            specifies the location of the .yml configuration file
+
+        """
+        # load system and generate generic force field
+        system = yaff.System.from_file(str(path_system))
+        with open(path_pars, 'r') as f:
+            pars = path_pars.read()
+        configuration = Configuration(system, pars)
+
+        if path_config: # loads .yml contents and calls update_properties()
+            with open(path_config, 'r') as f:
+                config = yaml.load(f)
+            configuration.update_properties(config)
+        return configuration
+
+    def initialize_properties(self):
+        """Initializes properties to YAFF defaults"""
+        try:
+            self.supercell = [1, 1, 1] # default supercell setting
+        except ValueError:
+            pass
+
         try:
             self.rcut = yaff.FFArgs().rcut / molmod.units.angstrom
+        except ValueError:
+            pass
+
+        try:
+            self.switch_width = 4.0 # 4.0 angstrom default
         except ValueError:
             pass
 
@@ -65,15 +181,42 @@ class Configuration:
             pass
 
         try:
-            self.ewald_parameters = (yaff.FFArgs().alpha_scale,
-                    yaff.FFArgs().gcut_scale)
+            self.ewald_alphascale = yaff.FFArgs().alpha_scale
         except ValueError:
             pass
 
-        # TODO
-        # save .ini file
-        # create system, ffargs for force field generation
-        # evaluate method
+        try:
+            self.ewald_gcutscale = yaff.FFArgs().gcut_scale
+        except ValueError:
+            pass
+
+    def update_properties(self, config):
+        """Updates property values based on values in .yml file
+
+        Parameters
+        ----------
+
+        config : dict
+            dictionary, e.g. loaded from .yml file
+        """
+        for name in self.properties:
+            if name in config['yaff'].keys():
+                # following should not raise anything
+                setattr(self, name, config['yaff'][name])
+
+    @property
+    def supercell(self):
+        """Returns the supercell tuple"""
+        return self._supercell
+
+    @supercell.setter
+    def supercell(self, value):
+        if self.periodic:
+            assert len(value) == 3        # systems are 3D periodic
+            self._supercell = list(value) # store as list because of pyyaml
+        else: # property not applicable
+            self._supercell = None
+            raise ValueError('Cannot set supercell because system is aperiodic')
 
     @property
     def rcut(self):
@@ -104,6 +247,34 @@ class Configuration:
             raise ValueError('Cannot set rcut for this system')
 
     @property
+    def switch_width(self):
+        """Returns the width of the switching function
+        """
+        return self._switch_width
+
+    @switch_width.setter
+    def switch_width(self, value):
+        """Sets the width of the switching function
+
+        A ValueError is raised if no nonbonded interactions are found
+
+        Parameters
+        ----------
+
+        value : float [angstrom]
+            desired width of switching function. A width of zero implies a hard
+            cutoff. (YAFF default value is 4 angstrom)
+
+        """
+        if ('MM3' in self.prefixes) or ('LJ' in self.prefixes):
+            assert type(value) == float
+            self._switch_width = value
+            return True
+        else: # property not applicable
+            self._switch_width = None
+            raise ValueError('Cannot set switch width.')
+
+    @property
     def tailcorrections(self):
         """Returns whether tailcorrections are enabled"""
         return self._tailcorrections
@@ -121,8 +292,9 @@ class Configuration:
             enables or disables tail corrections
 
         """
-        # tailcorrections apply only to dispersion nonbonded force parts:
-        if ('MM3' in self.prefixes or 'LJ' in self.prefixes):
+        # tailcorrections apply only to dispersion nonbonded force parts in
+        # periodic systems:
+        if ('MM3' in self.prefixes or 'LJ' in self.prefixes) and self.periodic:
             assert type(value) == bool
             self._tailcorrections = value
             return True
@@ -131,114 +303,53 @@ class Configuration:
             raise ValueError('Cannot set tailcorrections for this system')
 
     @property
-    def ewald_parameters(self):
-        """Returns ewald parameters (alpha_scale, gcut_scale)"""
-        return self._ewald_parameters
+    def ewald_alphascale(self):
+        """Returns the alpha_scale parameter for the ewald summation"""
+        return self._ewald_alphascale
 
-    @ewald_parameters.setter
-    def ewald_parameters(self, value):
-        """Sets the ewald parameters
+    @ewald_alphascale.setter
+    def ewald_alphascale(self, value):
+        """Sets the alpha_scale parameter for the ewald summation
 
         A ValueError is raised if no Ewald sum is present in the force field
 
         Parameters
         ----------
 
-        value : tuple of float
-            tuple of floats (alpha_scale, gcut_scale)
+        value : float, dimensionless
+            desired alpha scale
 
         """
         # ewald parameters apply only to periodic systems with electrostatics
         if 'FIXQ' in self.prefixes and self.periodic:
-            assert len(value) == 2 # value is tuple of (alpha, gcut)
-            self._ewald_parameters = value
+            assert type(value) == float
+            self._ewald_alphascale = value
         else:
-            self._ewald_parameters = None
+            self._ewald_alphascale = None
             raise ValueError('Cannot set ewald parameters for this system')
 
-    def determine_supercell(self, rcut):
-        """Determines the smallest supercell for which rcut is possible
+    @property
+    def ewald_gcutscale(self):
+        """Returns the gcut_scale parameter for the ewald summation"""
+        return self._ewald_gcutscale
 
-        Since OpenMM does not allow particles to interact with their
-        periodic copies, the maximum allowed interaction range (often equal to
-        cutoff range of the nonbonded interactions) is determined by the cell
-        geometry. This evaluates the current cell and supercells to compute
-        the maximum allowed rcut for each option.
+    @ewald_gcutscale.setter
+    def ewald_gcutscale(self, value):
+        """Sets the gcut_scale parameter for the ewald summation
 
-        Parameters
-        ----------
-
-        rcut : float
-            desired cutoff radius
-
-        """
-        rvecs = self.forcefield.system.cell._get_rvecs()
-        current_rcut = 0
-        i, j, k = (1, 1, 1)
-        while k < 10: # c vector is last to increase
-            while j < 10: # b vector second to increase
-                while i < 10: # a vector first to increase
-                    while current_rcut < rcut:
-                        supercell = (i, j, k)
-                        rvecs_ = np.array(supercell)[:, np.newaxis] * rvecs
-                        try:
-                            current_rcut = determine_rcut(reduced)
-                        except ValueError:
-                            pass # invalid box vectors, move on to next
-        return supercell
-
-
-    def log(self):
-        """Logs information about this configuration"""
-        pass
-
-    def write(self, path_config=None):
-        """Generates the .ini contents and optionally saves it to a file
+        A ValueError is raised if no Ewald sum is present in the force field
 
         Parameters
         ----------
 
-        path_config : pathlib.Path, optional
-            specifies the location of the output .ini file
+        value : float, dimensionless
+            desired gcut scale
 
         """
-        config = ConfigParser()
-        for name, location in self.config_layout.items():
-            assert len(location) == 2 # no nested ini
-            config[location[0]] = {} # initialize dicts
-        for name, location in self.config_layout.items():
-            value = getattr(self, name)
-            if value is not None: # if property is applicable
-                config[location[0]][location[1]] = str(value)
-
-        if path_config is not None:
-            assert path_config.suffix == '.ini'
-            with open(path_config, 'w') as f:
-                config.write(f)
-        return config
-
-
-    @staticmethod
-    def from_files(path_system, path_pars):
-        """Initializes a config .ini file with default values
-
-        The system and force field objects are created, and the relevant
-        key value pairs are added to the configparser and saved to an .ini
-        file specified by path_config.
-
-        Parameters
-        ----------
-
-        path_system : pathlib.Path
-            specifies the location of the YAFF .chk file
-
-        path_pars : pathlib.Path
-            specifies the location of the force field parameters .txt file
-
-        """
-        # load system and generate generic force field
-        system = yaff.System.from_file(str(path_system))
-        with open(path_pars, 'r') as f:
-            pars = path_pars.read()
-        configuration = Configuration(system, pars)
-        return configuration
+        # ewald parameters apply only to periodic systems with electrostatics
+        if 'FIXQ' in self.prefixes and self.periodic:
+            assert type(value) == float
+            self._ewald_gcutscale = value
+        else:
+            self._ewald_gcutscale = None
+            raise ValueError('Cannot set ewald parameters for this system')

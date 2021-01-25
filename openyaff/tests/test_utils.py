@@ -2,7 +2,7 @@ import numpy as np
 
 from openyaff.utils import transform_lower_diagonal, check_reduced_form
 
-from systems import get_forcefield
+from systems import get_system
 
 
 def test_transform_lower_diagonal():
@@ -15,7 +15,7 @@ def test_transform_lower_diagonal():
         transform_lower_diagonal(pos, trial) # in-place
         # comparison with cholesky made inside transform_lower_diagonal
 
-    ff = get_forcefield('cobdp') # nonrectangular system
+    ff = get_system('cobdp', return_forcefield=True) # nonrectangular system
     gpos0 = np.zeros((ff.system.natom, 3))
     energy0 = ff.compute(gpos0, None)
     rvecs = ff.system.cell._get_rvecs().copy()
