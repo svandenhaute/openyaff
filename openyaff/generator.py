@@ -1118,8 +1118,7 @@ class FixedChargeGenerator(yaff.NonbondedGenerator):
         rcut = ff_args.rcut / (molmod.units.nanometer) * unit.nanometer
         force.setCutoffDistance(rcut)
         if system.cell.nvec == 3:
-            key = 'pme_error_thres'
-            assert delta is not None # specifies delta
+            assert delta is not None
             force.setNonbondedMethod(4) # PME
             force.setEwaldErrorTolerance(delta)
         else:

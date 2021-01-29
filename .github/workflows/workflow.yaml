@@ -51,6 +51,7 @@ jobs:
           echo 'TESTMESSAGE'
           pip install pytest coverage
           coverage run -m py.test
+          coverage xml
       - uses: codecov/codecov-action@v1
         with:
           token: fea4705c-9b79-49f7-92d6-2d12d25cac15
