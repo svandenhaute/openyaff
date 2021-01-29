@@ -13,6 +13,10 @@ jobs:
       #          python-version: 3.8
       #
       - uses: actions/checkout@v2
+      - uses: codecov/codecov-action@v1
+        with:
+          token: fea4705c-9b79-49f7-92d6-2d12d25cac15
+          verbose: True
       - uses: conda-incubator/setup-miniconda@v2
         with:
           auto-update-conda: true
@@ -51,8 +55,3 @@ jobs:
           echo 'TESTMESSAGE'
           pip install pytest pytest-cov
           pytest --pyargs openyaff
-      - name: Upload coverage
-        uses: codecov/codecov-action@v1
-        shell: bash -l {0}
-        run: |
-          bash <(curl -s https://codecov.io/bash) -t fea4705c-9b79-49f7-92d6-2d12d25cac15
