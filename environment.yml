@@ -1,4 +1,4 @@
-name: envopencmm
+name: envopenyaff
 channels:
   - conda-forge
   - defaults
@@ -55,5 +55,5 @@ dependencies:
     - python-dateutil==2.8.1
     - scipy==1.6.0
     - pyyaml==5.4.1
+    - coverage==5.3.1
       #- yaff==1.6.0.post17 # manual install
-prefix: /home/sandervandenhaute/miniconda3/envs/envopencmm

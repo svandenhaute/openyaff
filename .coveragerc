@@ -1,0 +1,3 @@
+[run]
+omit = ./openyaff/tests/*
+source = openyaff
