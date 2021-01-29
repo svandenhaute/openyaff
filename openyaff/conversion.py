@@ -1,3 +1,4 @@
+import numpy as np
 
 from openyaff.utils import create_openmm_system
 from openyaff.generator import AVAILABLE_PREFIXES, apply_generators_mm
@@ -12,6 +13,19 @@ class ExplicitConversion:
     synchronously between OpenMM and YAFF.
 
     """
+
+    def __init__(self, pme_error_thres=1e-5):
+        """Constructor
+
+        Parameters
+        ----------
+
+        pme_error_thres : float
+            determines the threshold for the error tolerance in the
+            NonbondedForce PME evaluation
+
+        """
+        self.pme_error_thres = pme_error_thres
 
     def check_compatibility(self, configuration):
         """Checks compatibility of current settings with a given configuration
@@ -54,6 +68,17 @@ class ExplicitConversion:
         self.check_compatibility(configuration)
         yaff_seed = configuration.create_seed(kind=seed_kind)
         system_mm = create_openmm_system(yaff_seed.system)
-        apply_generators_mm(yaff_seed, system_mm)
+        kwargs = {}
+
+        # if system is periodic and contains electrostatis; compute PME params
+        if (configuration.ewald_alphascale is not None and
+                seed_kind in ['full', 'electrostatic', 'nonbonded']):
+            alpha = configuration.ewald_alphascale
+            delta = np.exp(-(alpha) ** 2) / 2
+            if delta > self.pme_error_thres:
+                kwargs['delta'] = delta
+            else:
+                kwargs['delta'] = self.pme_error_thres
+        apply_generators_mm(yaff_seed, system_mm, **kwargs)
         openmm_seed = OpenMMSeed(system_mm)
         return openmm_seed

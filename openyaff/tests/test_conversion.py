@@ -121,3 +121,136 @@ def test_simple_dispersion_nonperiodic():
                 forces,
                 decimal=6,
                 )
+
+
+def test_simple_dispersion_periodic():
+    system, pars = get_system('cobdp')
+    configuration = Configuration(system, pars)
+    # YAFF and OpenMM use a different switching function. If it is disabled,
+    # the results between both are identical up to 6 decimals
+    configuration.switch_width = 0.0 # disable switching
+    rcut = 11.0
+    configuration.rcut = rcut # request cutoff of 10 angstorm
+    supercell = configuration.determine_supercell(rcut)
+    configuration.supercell = list(supercell) # set required supercell
+    conversion = ExplicitConversion()
+    seed_kind = 'dispersion'
+    seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
+    seed_yaff = configuration.create_seed(kind=seed_kind)
+
+    wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
+    wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
+    assert wrapper_yaff.periodic # system should not be considered periodic
+    assert wrapper_mm.periodic # system should not be considered periodic
+
+    pos = seed_yaff.system.pos.copy()
+    rvecs = seed_yaff.system.cell._get_rvecs().copy()
+    for i in range(10):
+        dpos = np.random.uniform(-2.0, 2.0, size=pos.shape)
+        drvecs = np.random.uniform(-0.5, 0.5, size=rvecs.shape)
+        drvecs[0, 1] = 0
+        drvecs[0, 2] = 0
+        drvecs[1, 2] = 0
+        energy_mm, forces_mm = wrapper_mm.evaluate(
+                (pos + dpos) / molmod.units.angstrom,
+                rvecs=(rvecs + drvecs) / molmod.units.angstrom,
+                )
+        energy, forces = wrapper_yaff.evaluate(
+                (pos + dpos) / molmod.units.angstrom,
+                rvecs=(rvecs + drvecs) / molmod.units.angstrom,
+                )
+        np.testing.assert_almost_equal(
+                energy_mm,
+                energy,
+                decimal=5,
+                )
+        np.testing.assert_almost_equal(
+                forces_mm,
+                forces,
+                decimal=5,
+                )
+
+
+def test_simple_electrostatic_nonperiodic():
+    system, pars = get_system('alanine')
+    configuration = Configuration(system, pars)
+    # YAFF and OpenMM use a different switching function. If it is disabled,
+    # the results between both are identical up to 6 decimals
+    conversion = ExplicitConversion()
+    seed_kind = 'electrostatic'
+    seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
+    seed_yaff = configuration.create_seed(kind=seed_kind)
+
+    wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
+    wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
+    assert not wrapper_yaff.periodic # system should not be considered periodic
+    assert not wrapper_mm.periodic # system should not be considered periodic
+
+    pos = system.pos.copy()
+    for i in range(30):
+        dpos = np.random.uniform(-1.0, 1.0, size=pos.shape)
+        energy_mm, forces_mm = wrapper_mm.evaluate(
+                (pos + dpos) / molmod.units.angstrom,
+                )
+
+        energy, forces = wrapper_yaff.evaluate(
+                (pos + dpos) / molmod.units.angstrom,
+                )
+        np.testing.assert_almost_equal(
+                energy_mm,
+                energy,
+                decimal=3,
+                )
+        np.testing.assert_almost_equal(
+                forces_mm,
+                forces,
+                decimal=3,
+                )
+
+
+def test_simple_electrostatic_periodic():
+    system, pars = get_system('cobdp')
+    configuration = Configuration(system, pars)
+    # YAFF and OpenMM use a different switching function. If it is disabled,
+    # the results between both are identical up to 6 decimals
+    configuration.switch_width = 0.0 # disable switching
+    rcut = 11.0
+    configuration.rcut = rcut # request cutoff of 10 angstorm
+    supercell = configuration.determine_supercell(rcut)
+    configuration.supercell = list(supercell) # set required supercell
+    conversion = ExplicitConversion(pme_error_thres=1e-5)
+    seed_kind = 'electrostatic'
+    seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
+    seed_yaff = configuration.create_seed(kind=seed_kind)
+
+    wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
+    wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
+    assert wrapper_yaff.periodic # system should not be considered periodic
+    assert wrapper_mm.periodic # system should not be considered periodic
+
+    pos = seed_yaff.system.pos.copy()
+    rvecs = seed_yaff.system.cell._get_rvecs().copy()
+    for i in range(20):
+        dpos = np.random.uniform(-2.0, 2.0, size=pos.shape)
+        drvecs = np.random.uniform(-0.5, 0.5, size=rvecs.shape)
+        drvecs[0, 1] = 0
+        drvecs[0, 2] = 0
+        drvecs[1, 2] = 0
+        energy_mm, forces_mm = wrapper_mm.evaluate(
+                (pos + dpos) / molmod.units.angstrom,
+                rvecs=(rvecs + drvecs) / molmod.units.angstrom,
+                )
+        energy, forces = wrapper_yaff.evaluate(
+                (pos + dpos) / molmod.units.angstrom,
+                rvecs=(rvecs + drvecs) / molmod.units.angstrom,
+                )
+        np.testing.assert_almost_equal(
+                energy_mm,
+                energy,
+                decimal=1,
+                )
+        np.testing.assert_almost_equal(
+                forces_mm,
+                forces,
+                decimal=1,
+                )

@@ -51,3 +51,8 @@ jobs:
           echo 'TESTMESSAGE'
           pip install pytest pytest-cov
           pytest --pyargs openyaff
+      - name: Upload coverage
+        uses: codecov/codecov-action@v1
+        shell: bash -l {0}
+        run: |
+          bash <(curl -s https://codecov.io/bash) -t fea4705c-9b79-49f7-92d6-2d12d25cac15

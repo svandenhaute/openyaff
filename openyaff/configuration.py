@@ -362,7 +362,8 @@ class Configuration:
     def switch_width(self, value):
         """Sets the width of the switching function
 
-        A ValueError is raised if no nonbonded interactions are found.
+        A ValueError is raised if no nonbonded interactions are found or if
+        the system is not periodic.
 
         Parameters
         ----------

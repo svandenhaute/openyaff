@@ -5,8 +5,8 @@ import simtk.unit as unit
 import simtk.openmm as mm
 
 
-def check_reduced_form(rvecs):
-    """Returns whether rvecs is in reduced form
+def is_lower_diagonal(rvecs):
+    """Returns whether rvecs is in lower diagonal form
 
     OpenMM puts requirements on the components of the box vectors.
     Essentially, rvecs has to be a lower triangular positive definite matrix
@@ -40,7 +40,7 @@ def determine_rcut(rvecs):
         (3, 3) array with box vectors as rows
 
     """
-    if not check_reduced_form(rvecs):
+    if not is_lower_diagonal(rvecs):
         raise ValueError('Box vectors are not in reduced form')
     else:
         return min([
@@ -50,11 +50,14 @@ def determine_rcut(rvecs):
                 ]) / 2
 
 
-def transform_lower_diagonal(pos, rvecs):
+def transform_lower_diagonal(pos, rvecs, reorder=False):
     """Transforms coordinate axes such that cell matrix is lower diagonal
 
     The transformation is derived from the QR decomposition and performed
-    in-place
+    in-place. Because the lower triangular form puts restrictions on the size
+    of off-diagonal elements, lattice vectors are by default reordered from
+    largest to smallest; this feature can be disabled using the reorder
+    keyword.
 
     Parameters
     ----------
@@ -65,7 +68,18 @@ def transform_lower_diagonal(pos, rvecs):
     rvecs : array_like
         (3, 3) array with box vectors as rows
 
+    reorder
+
     """
+    if reorder: # reorder box vectors as k, l, m with |k| >= |l| >= |m|
+        norms = np.linalg.norm(rvecs, axis=1)
+        ordering = np.argsort(norms)[::-1] # largest first
+        a = rvecs[ordering[0], :].copy()
+        b = rvecs[ordering[1], :].copy()
+        c = rvecs[ordering[2], :].copy()
+        rvecs[0, :] = a[:]
+        rvecs[1, :] = b[:]
+        rvecs[2, :] = c[:]
     q, r = np.linalg.qr(rvecs.T)
     flip_vectors = np.eye(3) * np.diag(np.sign(r)) # reflections after rotation
     rotation = np.linalg.inv(q.T) @ flip_vectors # full (improper) rotation
@@ -80,6 +94,45 @@ def transform_lower_diagonal(pos, rvecs):
 def compute_lengths_angles(rvecs):
     """Computes and returns the box vector lengths and angles"""
     raise NotImplementedError
+
+
+def do_lattice_reduction(rvecs):
+    """Transforms a triclinic cell into a rectangular cell
+
+    The algorithm is described in Bekker (1997). Essentially, it performs a
+    Gram-Schmidt orthogonalization of the existing lattice vectors, after first
+    reordering them from longest to shortest.
+
+    Parameters
+    ----------
+
+    rvecs : array_like
+        (3, 3) array with box vectors as rows. These need not be in lower
+        diagonal form.
+
+    """
+    # reorder box vectors as k, l, m with |k| >= |l| >= |m|
+    norms = np.linalg.norm(rvecs, axis=1)
+    ordering = np.argsort(norms)[::-1] # largest first
+    # define original lattice basis vectors and their norms
+    k = rvecs[ordering[0], :]
+    l = rvecs[ordering[1], :]
+    m = rvecs[ordering[2], :]
+    k_ = k / np.linalg.norm(k)
+    l_ = l / np.linalg.norm(k)
+    m_ = m / np.linalg.norm(k)
+    # define orthogonal basis for the same lattice.
+    u = k
+    v = l - np.dot(l, k_) * k_
+    kvecl_ = np.cross(k, l) / np.linalg.norm(np.cross(k, l))
+    w = np.dot(m, kvecl_) * kvecl_
+    # assert orthogonality of new basis
+    np.testing.assert_almost_equal(np.dot(u, v), 0.0)
+    np.testing.assert_almost_equal(np.dot(u, w), 0.0)
+    np.testing.assert_almost_equal(np.dot(v, w), 0.0)
+    reduced = np.stack((u, v, w), axis=0)
+    reduced *= np.sign(np.linalg.det(reduced)) # ensure positive determinant
+    return reduced
 
 
 def yaff_generate(seed):
@@ -97,21 +150,6 @@ def yaff_generate(seed):
     ff_args = seed.ff_args
     yaff.apply_generators(system, parameters, ff_args)
     return yaff.ForceField(system, ff_args.parts, ff_args.nlist)
-
-
-#def openmm_generate(seed)
-#    """Generates a yaff.ForceField instance based on a seed
-#
-#    Parameters
-#    ----------
-#
-#    seed : tuple of (mm.System,)
-#        seed for the OpenMM force field wrapper. For now, this is simply an
-#        OpenMM system object in which all forces are added by an
-#        openyaff.ExplicitConversion.apply() call.
-#
-#    """
-#    pass
 
 
 def create_openmm_system(system):
