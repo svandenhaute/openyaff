@@ -30,7 +30,7 @@ class Configuration:
             'ewald_alphascale',
             'ewald_gcutscale',
             ]
-    dispersion_prefixes    = ['MM3', 'LJ']
+    dispersion_prefixes    = ['MM3', 'LJ', 'LJCROSS']
     electrostatic_prefixes = ['FIXQ']
 
     def __init__(self, system, pars):
@@ -258,7 +258,7 @@ class Configuration:
 
         if path_config: # loads .yml contents and calls update_properties()
             with open(path_config, 'r') as f:
-                config = yaml.load(f)
+                config = yaml.load(f, Loader=yaml.FullLoader)
             configuration.update_properties(config)
         return configuration
 
@@ -344,6 +344,7 @@ class Configuration:
         if (self.periodic and (
             ('MM3' in self.prefixes) or
             ('LJ' in self.prefixes)  or
+            ('LJCROSS' in self.prefixes)  or
             ('FIXQ' in self.prefixes))):
             assert type(value) == float
             self._rcut = value
@@ -375,6 +376,7 @@ class Configuration:
         """
         if (self.periodic and (
             ('MM3' in self.prefixes) or
+            ('LJCROSS' in self.prefixes) or
             ('LJ' in self.prefixes))):
             assert type(value) == float
             self._switch_width = value
@@ -403,7 +405,10 @@ class Configuration:
         """
         # tailcorrections apply only to dispersion nonbonded force parts in
         # periodic systems:
-        if ('MM3' in self.prefixes or 'LJ' in self.prefixes) and self.periodic:
+        if self.periodic and (
+                ('MM3' in self.prefixes) or
+                ('LJ' in self.prefixes) or
+                ('LJCROSS' in self.prefixes)):
             assert type(value) == bool
             self._tailcorrections = value
             return True

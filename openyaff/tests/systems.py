@@ -75,6 +75,56 @@ def cobdp(return_forcefield=False):
     return system, pars
 
 
+def mil53(return_forcefield=False):
+    """Generate CoBDP system from YAFF input files"""
+    path_system = str(here / 'mil53' / 'system.chk')
+    path_pars = str(here / 'mil53' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    with open(path_pars, 'r') as f:
+        pars = f.read()
+    return system, pars
+
+
+def cof5(return_forcefield=False):
+    """Generate CoBDP system from YAFF input files"""
+    path_system = str(here / 'cof5' / 'system.chk')
+    path_pars = str(here / 'cof5' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    with open(path_pars, 'r') as f:
+        pars = f.read()
+    return system, pars
+
+
+def cau13(return_forcefield=False):
+    """Generate CoBDP system from YAFF input files"""
+    path_system = str(here / 'cau13' / 'system.chk')
+    path_pars = str(here / 'cau13' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    with open(path_pars, 'r') as f:
+        pars = f.read()
+    return system, pars
+
+
+def mof808(return_forcefield=False):
+    """Generate CoBDP system from YAFF input files"""
+    path_system = str(here / 'mof808' / 'system.chk')
+    path_pars = str(here / 'mof808' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    with open(path_pars, 'r') as f:
+        pars = f.read()
+    return system, pars
+
+
+def ppycof(return_forcefield=False):
+    """Generate CoBDP system from YAFF input files"""
+    path_system = str(here / 'ppycof' / 'system.chk')
+    path_pars = str(here / 'ppycof' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    with open(path_pars, 'r') as f:
+        pars = f.read()
+    return system, pars
+
+
 def alanine(return_forcefield=False):
     path_system = str(here / 'alanine' / 'system.chk')
     path_pars = str(here / 'alanine' / 'pars.txt')
@@ -89,6 +139,16 @@ def get_system(name, return_forcefield=False, **kwargs):
         system, pars = lennardjones(**kwargs)
     elif name == 'cobdp':
         system, pars = cobdp(**kwargs)
+    elif name == 'mil53':
+        system, pars = mil53(**kwargs)
+    elif name == 'cof5':
+        system, pars = cof5(**kwargs)
+    elif name == 'cau13':
+        system, pars = cau13(**kwargs)
+    elif name == 'mof808':
+        system, pars = mof808(**kwargs)
+    elif name == 'ppycof':
+        system, pars = ppycof(**kwargs)
     elif name == 'alanine':
         system, pars = alanine(**kwargs)
     else:

@@ -19,9 +19,9 @@ def is_lower_diagonal(rvecs):
         (3, 3) array with box vectors as rows
 
     """
-    return (rvecs[0, 0] > 2 * rvecs[1, 0] and # b mostly along y axis
-            rvecs[0, 0] > 2 * rvecs[2, 0] and # z mostly along z axis
-            rvecs[1, 1] > 2 * rvecs[2, 1] and # z mostly along z axis
+    return (rvecs[0, 0] > abs(2 * rvecs[1, 0]) and # b mostly along y axis
+            rvecs[0, 0] > abs(2 * rvecs[2, 0]) and # z mostly along z axis
+            rvecs[1, 1] > abs(2 * rvecs[2, 1]) and # z mostly along z axis
             rvecs[0, 0] > 0 and # positive volumes
             rvecs[1, 1] > 0 and
             rvecs[2, 2] > 0 and

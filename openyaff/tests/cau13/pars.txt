@@ -1,0 +1,177 @@
+# BONDHARM
+#---------
+BONDHARM:UNIT  K kjmol/A**2
+BONDHARM:UNIT  R0 A
+
+BONDHARM:PARS      H_OH      O_OH  4.6138217095e+03  9.9044892023e-01
+BONDHARM:PARS        AL      O_OH  1.2300988205e+03  1.8547661369e+00
+BONDHARM:PARS        AL      O_CA  9.0909014974e+02  1.9233784716e+00
+BONDHARM:PARS      C_CA      O_CA  5.5489817593e+03  1.2766147819e+00
+BONDHARM:PARS        C1        H1  2.8418491099e+03  1.1107440786e+00
+BONDHARM:PARS        C1      C_CA  2.2461925395e+03  1.5173281192e+00
+BONDHARM:PARS        C2        H2  2.9521927388e+03  1.1030886054e+00
+BONDHARM:PARS        C1        C2  2.4621835202e+03  1.5236690540e+00
+BONDHARM:PARS        C2        C2  2.5057556777e+03  1.5222747526e+00
+
+
+# BENDAHARM
+#----------
+BENDAHARM:UNIT  K kjmol/rad**2
+BENDAHARM:UNIT  THETA0 deg
+
+BENDAHARM:PARS        AL      O_OH      H_OH  1.3818097017e+02  1.1527634167e+02
+BENDAHARM:PARS        AL      O_OH        AL  9.7645124057e+01  1.2452639897e+02
+BENDAHARM:PARS        AL      O_CA      C_CA  1.2058027136e+02  1.3133899616e+02
+BENDAHARM:PARS      O_CA        AL      O_OH  2.8721783192e+02  9.0122856404e+01
+BENDAHARM:PARS      O_CA      C_CA      O_CA  6.9878776047e+02  1.2505731650e+02
+BENDAHARM:PARS        C1      C_CA      O_CA  5.2905289597e+02  1.1736823216e+02
+BENDAHARM:PARS        C2        C1        H1  3.6671611123e+02  1.0831223411e+02
+BENDAHARM:PARS        C2        C1      C_CA  5.4502964336e+02  1.1242826696e+02
+BENDAHARM:PARS      C_CA        C1        H1  3.5505837783e+02  1.0267522252e+02
+BENDAHARM:PARS        C2        C1        C2  6.0759998002e+02  1.1220494504e+02
+BENDAHARM:PARS        C1        C2        H2  3.6774879731e+02  1.0920342534e+02
+BENDAHARM:PARS        H2        C2        H2  2.7535612890e+02  1.0676297910e+02
+BENDAHARM:PARS        C1        C2        C2  6.0808667602e+02  1.1145705808e+02
+BENDAHARM:PARS        C2        C2        H2  3.7913068913e+02  1.1006067563e+02
+
+
+# BENDCHARM
+#----------
+BENDCHARM:UNIT  K kjmol
+BENDCHARM:UNIT  COS0 au
+
+BENDCHARM:PARS      O_OH        AL      O_OH  1.9988582113e-01  -1.0000000000e+00
+
+
+# BENDCOS
+#--------
+BENDCOS:UNIT  A kjmol
+BENDCOS:UNIT  PHI0 deg
+
+BENDCOS:PARS      O_CA        AL      O_CA  4 4.4098907961e+00  0.0000000000e+00
+
+
+# TORSION
+#--------
+TORSION:UNIT  A kjmol
+TORSION:UNIT  PHI0 deg
+
+TORSION:PARS        AL      O_CA      C_CA        C1  2 1.9987950198e+01  0.0000000000e+00
+TORSION:PARS        H2        C2        C2        H2  3 2.3000282243e+00  6.0000000000e+01
+TORSION:PARS        AL      O_CA      C_CA      O_CA  2 1.1221139764e+00  0.0000000000e+00
+TORSION:PARS        C1        C2        C2        C1  3 1.0456468216e+01  6.0000000000e+01
+TORSION:PARS        C2        C1        C2        H2  3 9.9989633155e-01  6.0000000000e+01
+TORSION:PARS      C_CA        C1        C2        H2  3 4.7997552288e+00  6.0000000000e+01
+TORSION:PARS        C1        C2        C2        H2  3 5.8980759004e+00  6.0000000000e+01
+TORSION:PARS        H1        C1      C_CA      O_CA  6 1.1936818153e-01  0.0000000000e+00
+TORSION:PARS        C2        C1      C_CA      O_CA  6 3.5771375531e-02  3.0000000000e+01
+TORSION:PARS        C2        C1        C2        C2  3 4.2928556910e+00  6.0000000000e+01
+TORSION:PARS        C2        C2        C1        H1  3 6.5587663875e-01  6.0000000000e+01
+TORSION:PARS        C2        C2        C1      C_CA  3 1.0203023838e+01  6.0000000000e+01
+
+
+# OOPDIST
+#--------
+OOPDIST:UNIT  K kjmol/A**2
+OOPDIST:UNIT  D0 A
+
+OOPDIST:PARS        C1      O_CA      O_CA      C_CA  1.5726584306e+03  0.0000000000e+00
+
+
+# SQOOPDIST
+#----------
+SQOOPDIST:UNIT  K kjmol/A**4
+SQOOPDIST:UNIT  D0 A**2
+
+SQOOPDIST:PARS        AL        AL      H_OH      O_OH  8.5161438918e+01  1.0888678531e+00
+
+
+# Cross
+#------
+Cross:UNIT  KSS kjmol/angstrom**2
+Cross:UNIT  KBS0 kjmol/(angstrom*rad)
+Cross:UNIT  KBS1 kjmol/(angstrom*rad)
+Cross:UNIT  R0 angstrom
+Cross:UNIT  R1 angstrom
+Cross:UNIT  THETA0 deg
+
+Cross:PARS        AL      O_OH      H_OH   2.3831668352e+01   5.6837689384e+01   6.6089814751e+01  1.8499257894e+00  9.8870615157e-01  1.0941510375e+02
+Cross:PARS        AL      O_OH        AL   1.7539517439e+02   35.1306516055      35.1306516055     1.8499257894e+00  1.8499257894e+00  1.2873643361e+02
+Cross:PARS        AL      O_CA      C_CA   3.1776362346e+02   7.2507028624e+01   1.4183462026e+02  1.9216448958e+00  1.2764154605e+00  1.3276433314e+02
+Cross:PARS      O_OH        AL      O_OH  -4.3499764453e+00   0.0000000000e+00   0.0000000000e+00  1.8499257894e+00  1.8499257894e+00  0.0000000000e+00
+Cross:PARS      O_CA        AL      O_OH   7.7279891974e+01   1.9217516915e+02   1.3827174170e+02  1.9216448958e+00  1.8499257894e+00  8.9997345504e+01
+Cross:PARS      O_CA        AL      O_CA   1.1285229242e+02   0.0000000000e+00   0.0000000000e+00  1.9216448958e+00  1.9216448958e+00  0.0000000000e+00
+Cross:PARS      O_CA      C_CA      O_CA   8.0743104120e+02   363.0607723        363.0607723       1.2764154605e+00  1.2764154605e+00  1.2459919031e+02
+Cross:PARS        C1      C_CA      O_CA   3.0986496521e+02   1.4325154652e+02   3.9346136807e+02  1.5187206748e+00  1.2764154605e+00  1.1771026160e+02
+Cross:PARS        C2        C1        H1   5.4254680178e+01   1.5580544504e+02   9.6686556088e+01  1.5211562891e+00  1.1103800427e+00  1.0806346065e+02
+Cross:PARS        C2        C1      C_CA   1.5866543162e+02   1.7768666829e+02   1.4635915721e+02  1.5211562891e+00  1.5187206748e+00  1.1263176269e+02
+Cross:PARS      C_CA        C1        H1   5.7737892402e+01   6.2725280929e+01   1.4904064976e+02  1.5187206748e+00  1.1103800427e+00  1.0417951022e+02
+Cross:PARS        C2        C1        C2   1.2840413326e+02   201.075130945      201.075130945     1.5211562891e+00  1.5211562891e+00  1.1108828460e+02
+Cross:PARS        C1        C2        H2   4.1696624832e+01   1.5918743668e+02   8.2250208355e+01  1.5211562891e+00  1.1029265702e+00  1.0913119404e+02
+Cross:PARS        H2        C2        H2   2.0823419871e+01   89.8069360225      89.8069360225     1.1029265702e+00  1.1029265702e+00  1.0714570111e+02
+Cross:PARS        C1        C2        C2   1.1687284676e+02   2.0483896058e+02   1.9003355263e+02  1.5211562891e+00  1.5220155988e+00  1.1136175767e+02
+Cross:PARS        C2        C2        H2   4.7220049951e+01   1.4903674902e+02   7.8968647110e+01  1.5220155988e+00  1.1029265702e+00  1.1009002124e+02
+
+# Fixed charges
+# =============
+
+# Mathematical form: q_A = q_0A + sum'_B p_BA
+# where q0_A is the reference charge of atom A. It is mostly zero, sometimes a
+# non-zero integer. The total charge of a fragment is the sum of all reference
+# charges. The parameter p_BA is the charge transfered from B to A. Such charge
+# transfers are only carried out over bonds in the FF topology.
+# The charge on an atom is modeled as a Gaussian distribution. The spread on the
+# Gaussian is called the radius R. When the radius is set to zero, point charges
+# will be used instead of smeared charges.
+
+FIXQ:UNIT Q0 e
+FIXQ:UNIT P e
+FIXQ:UNIT R angstrom
+FIXQ:SCALE 1 1.0
+FIXQ:SCALE 2 1.0
+FIXQ:SCALE 3 1.0
+FIXQ:DIELECTRIC 1.0
+
+# Atomic parameters
+# ----------------------------------------------------
+# KEY        label  Q_0A              R_A
+# ----------------------------------------------------
+FIXQ:ATOM       AL  2.0593660177  1.6742
+FIXQ:ATOM     O_CA -0.7528294221  1.1325
+FIXQ:ATOM     O_OH -1.1996510170  1.1325
+FIXQ:ATOM       C1 -0.2961847512  1.1703
+FIXQ:ATOM       C2 -0.2414030453  1.1703
+FIXQ:ATOM     C_CA  0.8658071348  1.1703
+FIXQ:ATOM       H1  0.1526207587  0.7308
+FIXQ:ATOM       H2  0.1355738628  0.7308
+FIXQ:ATOM     H_OH  0.5159427204  0.7308
+
+# van der Waals
+#==============
+
+# The following mathemetical form is supported:
+#  - MM3:   EPSILON*(1.84e5*exp(-12*r/SIGMA)-2.25*(SIGMA/r)^6)
+#  - LJ:    4.0*EPSILON*((SIGMA/r)^12 - (SIGMA/r)^6)
+#
+# Remark:
+#  In MM3, if ONLYPAULI=1 then only the pauli term will be used.
+#  If ONLYPAULI=0, the full MM3 expression is used with 12.
+
+MM3:UNIT SIGMA angstrom
+MM3:UNIT EPSILON kcalmol
+MM3:SCALE 1 0.0
+MM3:SCALE 2 0.0
+MM3:SCALE 3 1.0
+
+# ---------------------------------------------
+# KEY      ffatype  SIGMA  EPSILON  ONLYPAULI
+# ---------------------------------------------
+MM3:PARS      AL     2.360   0.116      0
+MM3:PARS    O_CA     1.820   0.059      0
+MM3:PARS    O_OH     1.820   0.059      0
+MM3:PARS    C_CA     1.940   0.056      0
+MM3:PARS      C1     2.040   0.027      0
+MM3:PARS      C2     2.040   0.027      0
+MM3:PARS      H1     1.620   0.020      0
+MM3:PARS      H2     1.620   0.020      0
+MM3:PARS    H_OH     1.600   0.016      0

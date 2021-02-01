@@ -364,58 +364,58 @@ class OopDistGenerator(ValenceMirroredGenerator):
                 )
 
 
-#class SquareOopDistGenerator(ValenceMirroredGenerator):
-#    nffatype = 4
-#    par_info = [('K', float), ('D0', float)]
-#    prefix = 'SQOOPDIST'
-#    ICClass = yaff.SqOopDist
-#    VClass = yaff.Harmonic
-#    allow_superposition = False
-#
-#    def iter_equiv_keys_and_pars(self, key, pars):
-#        yield key, pars
-#        yield (key[2], key[0], key[1], key[3]), pars
-#        yield (key[1], key[2], key[0], key[3]), pars
-#        yield (key[2], key[1], key[0], key[3]), pars
-#        yield (key[1], key[0], key[2], key[3]), pars
-#        yield (key[0], key[2], key[1], key[3]), pars
-#
-#    def iter_indexes(self, system):
-#        #Loop over all atoms; if an atom has 3 neighbors,
-#        #it is candidate for an OopDist term
-#        for atom in system.neighs1.keys():
-#            neighbours = list(system.neighs1[atom])
-#            if len(neighbours)==3:
-#                yield neighbours[0],neighbours[1],neighbours[2],atom
-#
-#    def get_force(self):
-#        dist = OopDistGenerator._get_dist()
-#        energy = '0.5 * K * (({})^2 - D0)^2'.format(dist)
-#        force = mm.CustomCompoundBondForce(4, energy)
-#        force.addPerBondParameter('K')
-#        force.addPerBondParameter('D0')
-#        force.setUsesPeriodicBoundaryConditions(True)
-#        return force
-#
-#    def add_term_to_force(self, force, pars, indexes):
-#        conversion = {
-#                'K': molmod.units.kjmol / molmod.units.nanometer ** 4,
-#                'D0': molmod.units.nanometer ** 2,
-#                }
-#        conversion_mm = {
-#                'K': unit.kilojoule_per_mole / unit.nanometer ** 4,
-#                'D0': unit.nanometer ** 2,
-#                }
-#        K = pars[0] / conversion['K'] * conversion_mm['K']
-#        D0 = pars[1] / conversion['D0'] * conversion_mm['D0']
-#        force.addBond(
-#                [
-#                    int(indexes[0]),
-#                    int(indexes[1]),
-#                    int(indexes[2]),
-#                    int(indexes[3])],
-#                [K, D0],
-#                )
+class SquareOopDistGenerator(ValenceMirroredGenerator):
+    nffatype = 4
+    par_info = [('K', float), ('D0', float)]
+    prefix = 'SQOOPDIST'
+    ICClass = yaff.pes.iclist.SqOopDist
+    VClass = yaff.Harmonic
+    allow_superposition = False
+
+    def iter_equiv_keys_and_pars(self, key, pars):
+        yield key, pars
+        yield (key[2], key[0], key[1], key[3]), pars
+        yield (key[1], key[2], key[0], key[3]), pars
+        yield (key[2], key[1], key[0], key[3]), pars
+        yield (key[1], key[0], key[2], key[3]), pars
+        yield (key[0], key[2], key[1], key[3]), pars
+
+    def iter_indexes(self, system):
+        #Loop over all atoms; if an atom has 3 neighbors,
+        #it is candidate for an OopDist term
+        for atom in system.neighs1.keys():
+            neighbours = list(system.neighs1[atom])
+            if len(neighbours)==3:
+                yield neighbours[0],neighbours[1],neighbours[2],atom
+
+    def get_force(self, periodic):
+        dist = OopDistGenerator._get_dist()
+        energy = '0.5 * K * (({})^2 - D0)^2'.format(dist)
+        force = mm.CustomCompoundBondForce(4, energy)
+        force.addPerBondParameter('K')
+        force.addPerBondParameter('D0')
+        force.setUsesPeriodicBoundaryConditions(periodic)
+        return force
+
+    def add_term_to_force(self, force, pars, indexes):
+        conversion = {
+                'K': molmod.units.kjmol / molmod.units.nanometer ** 4,
+                'D0': molmod.units.nanometer ** 2,
+                }
+        conversion_mm = {
+                'K': unit.kilojoule_per_mole / unit.nanometer ** 4,
+                'D0': unit.nanometer ** 2,
+                }
+        K = pars[0] / conversion['K'] * conversion_mm['K']
+        D0 = pars[1] / conversion['D0'] * conversion_mm['D0']
+        force.addBond(
+                [
+                    int(indexes[0]),
+                    int(indexes[1]),
+                    int(indexes[2]),
+                    int(indexes[3])],
+                [K, D0],
+                )
 
 
 class TorsionGenerator(ValenceMirroredGenerator):

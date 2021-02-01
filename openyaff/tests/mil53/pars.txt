@@ -1,0 +1,223 @@
+# MM3QUART
+#---------
+MM3QUART:UNIT  K kjmol/A**2
+MM3QUART:UNIT  R0 A
+
+MM3QUART:PARS      H_HY      O_HY  4.0731111893e+03  9.8945953260e-01
+MM3QUART:PARS        AL      O_HY  1.3391955475e+03  1.8558759490e+00
+MM3QUART:PARS        AL      O_CA  1.0051339554e+03  1.9131555614e+00
+MM3QUART:PARS      C_PH      H_PH  3.1720261504e+03  1.0914783854e+00
+MM3QUART:PARS      C_PH      C_PH  4.1418215374e+03  1.3893837686e+00
+MM3QUART:PARS      C_PC      C_PH  3.7922957752e+03  1.4027724212e+00
+MM3QUART:PARS      C_CA      O_CA  5.3745269423e+03  1.2796793785e+00
+MM3QUART:PARS      C_CA      C_PC  2.7371028895e+03  1.4909519201e+00
+
+
+# POLY4
+#------
+POLY4:UNIT  C0 kcalmol
+POLY4:UNIT  C1 kcalmol/A
+POLY4:UNIT  C2 kcalmol/A**2
+POLY4:UNIT  C3 kcalmol/A**3
+POLY4:UNIT  C4 kcalmol/A**4
+POLY4:UNIT  R0 A
+
+POLY4:PARS         O         H     0.0  0.0 607.19353721    -1388.65161960  1852.57698152   0.9419
+
+
+# MM3BENDA
+#---------
+MM3BENDA:UNIT  K kjmol/rad**2
+MM3BENDA:UNIT  THETA0 deg
+
+MM3BENDA:PARS      O_CA      C_CA      O_CA  6.2960219061e+02  1.2503894784e+02
+MM3BENDA:PARS      C_PH      C_PH      H_PH  2.9297859944e+02  1.2043737333e+02
+MM3BENDA:PARS      C_PC      C_CA      O_CA  6.3744053696e+02  1.1750329831e+02
+MM3BENDA:PARS        AL      O_HY      H_HY  1.3991615092e+02  1.1332870629e+02
+MM3BENDA:PARS        AL      O_CA      C_CA  1.6252273974e+02  1.3177455801e+02
+MM3BENDA:PARS      C_PC      C_PH      C_PH  5.5677145841e+02  1.1997212744e+02
+MM3BENDA:PARS      C_PH      C_PC      C_PH  5.2146871209e+02  1.1994637866e+02
+MM3BENDA:PARS      C_PC      C_PH      H_PH  2.9127815712e+02  1.1965545787e+02
+MM3BENDA:PARS        AL      O_HY        AL  2.5798702973e+02  1.1585611580e+02
+MM3BENDA:PARS      C_CA      C_PC      C_PH  3.6716957401e+02  1.2006289894e+02
+MM3BENDA:PARS      O_CA        AL      O_HY  2.2840858298e+02  8.9525857300e+01
+
+
+# BENDCOS
+#--------
+BENDCOS:UNIT  A kjmol
+BENDCOS:UNIT  PHI0 deg
+
+BENDCOS:PARS      O_HY        AL      O_HY  1 7.3149957546e+01  1.8000000000e+02
+
+
+# BENDCOS
+#--------
+BENDCOS:UNIT  A kjmol
+BENDCOS:UNIT  PHI0 deg
+
+BENDCOS:PARS      O_CA        AL      O_CA  4 4.6460882999e+00  0.0000000000e+00
+
+
+# BENDAHARM
+#----------
+BENDAHARM:UNIT  K kcalmol/rad**2
+BENDAHARM:UNIT  THETA0 deg
+
+BENDAHARM:PARS        H         O         H  87.85             107.4
+
+
+# TORSION
+#--------
+TORSION:UNIT  A kjmol
+TORSION:UNIT  PHI0 deg
+
+TORSION:PARS      C_PH      C_PC      C_PH      C_PH  2 3.0496154675e+01  0.0000000000e+00
+TORSION:PARS        AL      O_CA      C_CA      O_CA  2 9.9154100254e-01  0.0000000000e+00
+TORSION:PARS      C_CA      C_PC      C_PH      H_PH  2 1.8749464757e+01  0.0000000000e+00
+TORSION:PARS      C_CA      C_PC      C_PH      C_PH  2 4.0310529013e+01  0.0000000000e+00
+TORSION:PARS      C_PC      C_PH      C_PH      H_PH  2 3.1639143328e+01  0.0000000000e+00
+TORSION:PARS      C_PH      C_PC      C_PH      H_PH  2 2.6042933238e+01  0.0000000000e+00
+TORSION:PARS      C_PH      C_PC      C_CA      O_CA  2 1.2865070610e+01  0.0000000000e+00
+TORSION:PARS      C_PC      C_PH      C_PH      C_PC  2 3.2414164997e+01  0.0000000000e+00
+TORSION:PARS      H_PH      C_PH      C_PH      H_PH  2 1.7891387352e+01  0.0000000000e+00
+TORSION:PARS        AL      O_CA      C_CA      C_PC  2 1.8154431656e+01  0.0000000000e+00
+
+
+# OOPDIST
+#--------
+OOPDIST:UNIT  K kjmol/A**2
+OOPDIST:UNIT  D0 A
+
+OOPDIST:PARS      C_CA      C_PH      C_PH      C_PC  1.0164372537e+02  0.0000000000e+00
+OOPDIST:PARS      C_PC      O_CA      O_CA      C_CA  1.3701858775e+03  0.0000000000e+00
+OOPDIST:PARS      C_PC      C_PH      H_PH      C_PH  1.4983402526e+02  0.0000000000e+00
+
+
+# Cross
+#------
+Cross:UNIT  KSS kjmol/angstrom**2
+Cross:UNIT  KBS0 kjmol/(angstrom*rad)
+Cross:UNIT  KBS1 kjmol/(angstrom*rad)
+Cross:UNIT  R0 angstrom
+Cross:UNIT  R1 angstrom
+Cross:UNIT  THETA0 deg
+
+Cross:PARS        AL      O_HY      H_HY   1.6866935238e+01   7.3608167278e+01   7.8736269780e+01  1.8451703249e+00  9.8833869203e-01  1.1240663795e+02
+Cross:PARS        AL      O_HY        AL   1.7107962268e+02   85.303582304       85.303582304      1.8451703249e+00  1.8451703249e+00  1.2880709479e+02
+Cross:PARS        AL      O_CA      C_CA   3.1226704625e+02   6.9166171909e+01   1.7917904460e+02  1.9091670084e+00  1.2801751888e+00  1.3286674543e+02
+Cross:PARS      O_HY        AL      O_HY  -2.4756748234e+01   0.0000000000e+00   0.0000000000e+00  1.8451703249e+00  1.8451703249e+00  0.0000000000e+00
+Cross:PARS      O_CA        AL      O_HY   8.4975306610e+01   1.9923786585e+02   1.5015270885e+02  1.9091670084e+00  1.8451703249e+00  8.9633642146e+01
+Cross:PARS      O_CA        AL      O_CA   1.0477846886e+02   0.0000000000e+00   0.0000000000e+00  1.9091670084e+00  1.9091670084e+00  0.0000000000e+00
+Cross:PARS      C_PC      C_PH      H_PH   5.2004564831e+01   1.0345872911e+02   1.3393560551e+02  1.4021881573e+00  1.0915411192e+00  1.1944170035e+02
+Cross:PARS      C_PH      C_PH      C_PC   5.0424190708e+02   1.0656053730e+02   8.1301094874e+01  1.3903080352e+00  1.4021881573e+00  1.2014363901e+02
+Cross:PARS      H_PH      C_PH      C_PH   5.1074073975e+01   1.1912354769e+02   1.1844619809e+02  1.0915411192e+00  1.3903080352e+00  1.2048655338e+02
+Cross:PARS      C_PH      C_PC      C_CA   3.0491084834e+02   6.9241077827e+01   1.3636760326e+02  1.4021881573e+00  1.4894966479e+00  1.2000881823e+02
+Cross:PARS      C_PH      C_PC      C_PH   5.4385334387e+02   21.6157087555      21.6157087555     1.4021881573e+00  1.4021881573e+00  1.1978062260e+02
+Cross:PARS      C_PC      C_CA      O_CA   4.0712894394e+02   1.8228535496e+02   4.4809809779e+02  1.4894966479e+00  1.2801751888e+00  1.1777700177e+02
+Cross:PARS      O_CA      C_CA      O_CA   7.5658842743e+02   405.99186397       405.99186397      1.2801751888e+00  1.2801751888e+00  1.2475219023e+02
+
+
+
+# Fixed charges
+# =============
+
+# Mathematical form: q_A = q_0A + sum'_B p_AB
+# where q0_A is the reference charge of atom A. It is mostly zero, sometimes a
+# non-zero integer. The total charge of a fragment is the sum of all reference
+# charges. The parameter p_BA is the charge transfered from B to A. Such charge
+# transfers are only carried out over bonds in the FF topology.
+# The charge on an atom is modeled as a Gaussian distribution. The spread on the
+# Gaussian is called the radius R. When the radius is set to zero, point charges
+# will be used instead of smeared charges.
+
+FIXQ:UNIT Q0 e
+FIXQ:UNIT P e
+FIXQ:UNIT R angstrom
+FIXQ:SCALE 1 1.0
+FIXQ:SCALE 2 1.0
+FIXQ:SCALE 3 1.0
+FIXQ:DIELECTRIC 1.0
+
+# Atom parameters
+# -------------------------------------------
+# KEY        label        Q0             R   
+# -------------------------------------------
+FIXQ:ATOM     H_HY   0.000000000  0.730800000
+FIXQ:ATOM     O_HY   0.000000000  1.132500000
+FIXQ:ATOM       AL   0.000000000  1.674200000
+FIXQ:ATOM     O_CA   0.000000000  1.132500000
+FIXQ:ATOM     C_PH   0.000000000  1.170300000
+FIXQ:ATOM     H_PH   0.000000000  0.730800000
+FIXQ:ATOM     C_PC   0.000000000  1.170300000
+FIXQ:ATOM     C_CA   0.000000000  1.170300000
+
+FIXQ:ATOM        O  0.000000000       0.000000000
+FIXQ:ATOM        H  0.556400000       0.000000000
+FIXQ:ATOM        M -1.112800000       0.000000000
+
+# Bond parameters
+# -------------------------------------------
+# KEY       label0   label1          P_AB    
+# -------------------------------------------
+FIXQ:BOND     H_HY     O_HY   0.518526380
+FIXQ:BOND       AL     O_HY   0.345674657
+FIXQ:BOND       AL     O_CA   0.349912408
+FIXQ:BOND     C_PH     H_PH  -0.151969159
+FIXQ:BOND     C_PH     C_PH   0.000000000
+FIXQ:BOND     C_PC     C_PH  -0.045395041
+FIXQ:BOND     C_CA     O_CA   0.394651945
+FIXQ:BOND     C_CA     C_PC   0.056728179
+
+
+# van der Waals
+#==============
+
+# The following mathemetical form is supported:
+#  - LJ:    4.0*EPSILON*((SIGMA/r)^12 - (SIGMA/r)^6)
+#
+# Remark:
+#  In LJ, if ONLYPAULI=1 then only the pauli term will be used.
+
+LJCROSS:UNIT SIGMA angstrom
+LJCROSS:UNIT EPSILON kcalmol
+LJCROSS:SCALE 1 0.0
+LJCROSS:SCALE 2 0.0
+LJCROSS:SCALE 3 1.0
+
+LJCROSS:PARS            AL           AL       4.20500       0.1160
+LJCROSS:PARS            AL         O_HY       3.72400       0.0827
+LJCROSS:PARS            AL         H_HY       3.54600       0.0431
+LJCROSS:PARS            AL         O_CA       3.72400       0.0827
+LJCROSS:PARS            AL         C_CA       3.84850       0.0806
+LJCROSS:PARS            AL         C_PC       3.83100       0.0806
+LJCROSS:PARS            AL         C_PH       3.83100       0.0806
+LJCROSS:PARS            AL         H_PH       3.54600       0.0482
+LJCROSS:PARS          O_HY         O_HY       3.24300       0.0590
+LJCROSS:PARS          O_HY         H_HY       3.06500       0.0307
+LJCROSS:PARS          O_HY         O_CA       3.24300       0.0590
+LJCROSS:PARS          O_HY         C_CA       3.36750       0.0575
+LJCROSS:PARS          O_HY         C_PC       3.35000       0.0575
+LJCROSS:PARS          O_HY         C_PH       3.35000       0.0575
+LJCROSS:PARS          O_HY         H_PH       3.06500       0.0344
+LJCROSS:PARS          H_HY         H_HY       2.88700       0.0160
+LJCROSS:PARS          H_HY         O_CA       3.06500       0.0307
+LJCROSS:PARS          H_HY         C_CA       3.18950       0.0299
+LJCROSS:PARS          H_HY         C_PC       3.17200       0.0299
+LJCROSS:PARS          H_HY         C_PH       3.17200       0.0299
+LJCROSS:PARS          H_HY         H_PH       2.88700       0.0179
+LJCROSS:PARS          O_CA         O_CA       3.24300       0.0590
+LJCROSS:PARS          O_CA         C_CA       3.36750       0.0575
+LJCROSS:PARS          O_CA         C_PC       3.35000       0.0575
+LJCROSS:PARS          O_CA         C_PH       3.35000       0.0575
+LJCROSS:PARS          O_CA         H_PH       3.06500       0.0344
+LJCROSS:PARS          C_CA         C_CA       3.49200       0.0560
+LJCROSS:PARS          C_CA         C_PC       3.47450       0.0560
+LJCROSS:PARS          C_CA         C_PH       3.47450       0.0560
+LJCROSS:PARS          C_CA         H_PH       3.18950       0.0335
+LJCROSS:PARS          C_PC         C_PC       3.45700       0.0560
+LJCROSS:PARS          C_PC         C_PH       3.45700       0.0560
+LJCROSS:PARS          C_PC         H_PH       3.17200       0.0335
+LJCROSS:PARS          C_PH         C_PH       3.45700       0.0560
+LJCROSS:PARS          C_PH         H_PH       3.17200       0.0335
+LJCROSS:PARS          H_PH         H_PH       2.88700       0.0200

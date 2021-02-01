@@ -1,8 +1,17 @@
 import argparse
+import logging
+import yaff
 
 from pathlib import Path
 
-from openyaff import Configuration
+from openyaff import Configuration, load_conversion, load_validations
+
+
+yaff.log.set_level(yaff.log.silent)
+
+# enable logging
+logging.basicConfig(level=logging.INFO, format='%(name)s - %(message)s')
+logger = logging.getLogger(__name__) # logging per module
 
 
 def get_input_files(path_dir, filetypes):
@@ -40,21 +49,32 @@ def test():
     print('works!')
 
 
+def validate(cwd):
+    input_files = get_input_files(cwd, ['.chk', '.txt'])
+    path_yml = cwd / 'config.yml'
+    configuration = Configuration.from_files(*input_files, path_yml)
+    conversion = load_conversion(path_yml)
+    validations = load_validations(path_yml)
+    for validation in validations:
+        validation.run(configuration, conversion)
+
+
 def configure(cwd):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
-    path_ini = cwd / 'config.ini'
-    configuration = Configuration.from_files(*input_files, path_ini)
-    configuration.write(path_ini)
+    path_yml = cwd / 'config.yml'
+    configuration = Configuration.from_files(*input_files)
+    configuration.write(path_yml)
 
 
 def main():
+    print('')
     parser = argparse.ArgumentParser(
             description='conversion and testing of YAFF force fields to OpenMM-compatible format',
             )
     parser.add_argument(
             'mode',
             action='store',
-            help='determines mode of operation: init, compare, convert, test',
+            help='determines mode of operation: configure, validate, test',
             )
     args = parser.parse_args()
 
@@ -63,5 +83,7 @@ def main():
         test()
     elif args.mode == 'configure':
         configure(cwd)
+    elif args.mode == 'validate':
+        validate(cwd)
     else:
         raise NotImplementedError

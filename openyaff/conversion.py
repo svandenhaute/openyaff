@@ -1,3 +1,4 @@
+import yaml
 import numpy as np
 
 from openyaff.utils import create_openmm_system
@@ -5,7 +6,12 @@ from openyaff.generator import AVAILABLE_PREFIXES, apply_generators_mm
 from openyaff.seeds import OpenMMSeed
 
 
-class ExplicitConversion:
+class Conversion:
+    """Base class for conversion objects"""
+    kind = None
+
+
+class ExplicitConversion(Conversion):
     """Defines the explicit conversion procedure from YAFF to OpenMM
 
     In this procedure, each YAFF generator is extended with function calls
@@ -13,6 +19,7 @@ class ExplicitConversion:
     synchronously between OpenMM and YAFF.
 
     """
+    kind = 'explicit'
 
     def __init__(self, pme_error_thres=1e-5):
         """Constructor
@@ -63,7 +70,6 @@ class ExplicitConversion:
                     scale = float(line[1].split(' ')[-1])
                     assert (scale == 0.0) or (scale == 1.0)
 
-
     def apply(self, configuration, seed_kind='full'):
         """Converts a yaff configuration into an OpenMM seed
 
@@ -100,3 +106,19 @@ class ExplicitConversion:
         apply_generators_mm(yaff_seed, system_mm, **kwargs)
         openmm_seed = OpenMMSeed(system_mm)
         return openmm_seed
+
+
+def load_conversion(path_ini):
+    with open(path_ini, 'r') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    assert 'conversion' in list(config.keys())
+    config_conversion = config['conversion']
+    assert 'kind' in list(config_conversion.keys()), ('the configuration file'
+            ' should specify the kind of conversion to use')
+    conversion_cls = {}
+    for x in list(globals().values()):
+        if isinstance(x, type) and issubclass(x, Conversion):
+            conversion_cls[x.kind] = x
+    assert config_conversion['kind'] in list(conversion_cls.keys())
+    kind = config_conversion.pop('kind')
+    return conversion_cls[kind](**config_conversion)

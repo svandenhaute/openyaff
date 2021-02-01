@@ -296,3 +296,24 @@ def test_check_compatibility():
     configuration = Configuration(system, pars_unsupported)
     with pytest.raises(AssertionError):
         seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
+
+
+#def test_prefix_coverage():
+#    systems = ['mof808', 'cau13', 'ppycof', 'cof5', 'mil53']
+#    for name in systems:
+#        system, pars = get_system(name)
+#        configuration = Configuration(system, pars)
+#        configuration.switch_width = 0.0 # disable switching
+#        rcut = 10.0
+#        configuration.rcut = rcut # request cutoff of 10 angstorm
+#        supercell = configuration.determine_supercell(rcut)
+#        configuration.supercell = list(supercell) # set required supercell
+#        conversion = ExplicitConversion(pme_error_thres=1e-5)
+#        seed_kind = 'full'
+#        seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
+#        seed_yaff = configuration.create_seed(kind=seed_kind)
+#
+#        wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
+#        wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
+#        assert wrapper_yaff.periodic # system should not be considered periodic
+#        assert wrapper_mm.periodic # system should not be considered periodic
