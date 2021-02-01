@@ -30,6 +30,8 @@ class Configuration:
             'ewald_alphascale',
             'ewald_gcutscale',
             ]
+    dispersion_prefixes    = ['MM3', 'LJ']
+    electrostatic_prefixes = ['FIXQ']
 
     def __init__(self, system, pars):
         """Constructor
@@ -103,19 +105,17 @@ class Configuration:
 
         """
         assert kind in ['full', 'covalent', 'nonbonded', 'dispersion', 'electrostatic']
-        dispersion_prefixes    = ['MM3', 'LJ']
-        electrostatic_prefixes = ['FIXQ']
         parameters = self.parameters.copy()
         if kind == 'full':
             pass # do nothing, all prefixes should be retained
         elif kind == 'covalent':
             # pop all dispersion and electrostatic prefixes:
-            for key in (dispersion_prefixes + electrostatic_prefixes):
+            for key in (self.dispersion_prefixes + self.electrostatic_prefixes):
                 parameters.sections.pop(key, None) # returns None if not present
         elif kind == 'nonbonded':
             # retain only dispersion and electrostatic prefixes
             sections = {}
-            for key in (dispersion_prefixes + electrostatic_prefixes):
+            for key in (self.dispersion_prefixes + self.electrostatic_prefixes):
                 section = parameters.sections.get(key, None)
                 if section is not None: # only add if present
                     sections[key] = section
@@ -123,7 +123,7 @@ class Configuration:
         elif kind == 'dispersion':
             # retain only dispersion
             sections = {}
-            for key in dispersion_prefixes:
+            for key in self.dispersion_prefixes:
                 section = parameters.sections.get(key, None)
                 if section is not None: # only add if present
                     sections[key] = section
@@ -131,7 +131,7 @@ class Configuration:
         elif kind == 'electrostatic':
             # retain only dispersion
             sections = {}
-            for key in electrostatic_prefixes:
+            for key in self.electrostatic_prefixes:
                 section = parameters.sections.get(key, None)
                 if section is not None: # only add if present
                     sections[key] = section

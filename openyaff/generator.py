@@ -1124,6 +1124,13 @@ class FixedChargeGenerator(yaff.NonbondedGenerator):
         else:
             force.setNonbondedMethod(0) # nonperiodic cutoff not allowed
 
+        # exceptions using createExceptions() -- does not support all scales
+        #bonds = []
+        #for i in range(system.bonds.shape[0]):
+        #    bond = (int(system.bonds[i][0]), int(system.bonds[i][1]))
+        #    bonds.append(bond)
+        #force.createExceptionsFromBonds(bonds, 1.0, 1.0)
+
         # COMPENSATE FOR GAUSSIAN CHARGES
         if np.any(system.radii[:] !=0.0):
             alpha = ff_args.alpha_scale / rcut

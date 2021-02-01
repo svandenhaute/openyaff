@@ -1,4 +1,5 @@
 import molmod
+import pytest
 import numpy as np
 
 from openyaff import Configuration, ExplicitConversion, \
@@ -146,7 +147,7 @@ def test_simple_dispersion_periodic():
     pos = seed_yaff.system.pos.copy()
     rvecs = seed_yaff.system.cell._get_rvecs().copy()
     for i in range(10):
-        dpos = np.random.uniform(-2.0, 2.0, size=pos.shape)
+        dpos = np.random.uniform(-1.0, 1.0, size=pos.shape)
         drvecs = np.random.uniform(-0.5, 0.5, size=rvecs.shape)
         drvecs[0, 1] = 0
         drvecs[0, 2] = 0
@@ -230,7 +231,7 @@ def test_simple_electrostatic_periodic():
 
     pos = seed_yaff.system.pos.copy()
     rvecs = seed_yaff.system.cell._get_rvecs().copy()
-    for i in range(20):
+    for i in range(10):
         dpos = np.random.uniform(-2.0, 2.0, size=pos.shape)
         drvecs = np.random.uniform(-0.5, 0.5, size=rvecs.shape)
         drvecs[0, 1] = 0
@@ -254,3 +255,44 @@ def test_simple_electrostatic_periodic():
                 forces,
                 decimal=1,
                 )
+
+
+def test_check_compatibility():
+    system, _ = get_system('lennardjones')
+    # generate pars with unsupported prefix
+    pars_unsupported = """
+    MM3CAP:UNIT SIGMA angstrom
+    MM3CAP:UNIT EPSILON kcalmol
+    MM3CAP:SCALE 1 1.0
+    MM3CAP:SCALE 2 1.0
+    MM3CAP:SCALE 3 1.0
+
+    # ---------------------------------------------
+    # KEY      ffatype  SIGMA  EPSILON  ONLYPAULI
+    # ---------------------------------------------
+
+    MM3CAP:PARS      C     2.360   0.116      0"""
+
+    configuration = Configuration(system, pars_unsupported)
+    conversion = ExplicitConversion()
+    seed_kind = 'dispersion'
+    with pytest.raises(AssertionError):
+        seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
+
+    # generate pars with unsupported scaling
+    pars_unsupported = """
+    LJ:UNIT SIGMA angstrom
+    LJ:UNIT EPSILON kcalmol
+    LJ:SCALE 1 0.5
+    LJ:SCALE 2 1.0
+    LJ:SCALE 3 1.0
+
+    # ---------------------------------------------
+    # KEY      ffatype  SIGMA  EPSILON  ONLYPAULI
+    # ---------------------------------------------
+
+    LJ:PARS      C     2.360   0.116      0"""
+
+    configuration = Configuration(system, pars_unsupported)
+    with pytest.raises(AssertionError):
+        seed_mm = conversion.apply(configuration, seed_kind=seed_kind)

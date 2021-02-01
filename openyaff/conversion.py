@@ -31,8 +31,14 @@ class ExplicitConversion:
         """Checks compatibility of current settings with a given configuration
 
         The following checks are performed:
-            - all prefixes in the configuration should have a generator in
-            openyaff.generator
+
+            generator availability:
+                all prefixes in the configuration should have a generator in
+                openyaff.generator
+
+            noninteger scalings:
+                noninteger scalings in the dispersion or electrostatics is
+                currently not supported
 
         Parameters
         ----------
@@ -41,10 +47,22 @@ class ExplicitConversion:
             configuration for which to check compatibility
 
         """
-        #for key, _ in configuration.parameters.sections.items():
-        #    assert key in AVAILABLE_PREFIXES, ('I do not have a generator '
-        #            'for key {}'.format(key))
-        pass
+        # check available generators
+        for key, _ in configuration.parameters.sections.items():
+            assert key in AVAILABLE_PREFIXES, ('I do not have a generator '
+                    'for key {}'.format(key))
+        nonbonded_prefixes = []
+        nonbonded_prefixes += configuration.dispersion_prefixes
+        nonbonded_prefixes += configuration.electrostatic_prefixes
+        for key, _ in configuration.parameters.sections.items():
+            if key in nonbonded_prefixes: # can contain scalings
+                definition = _['SCALE']
+                # line == [line_no, line_content]
+                for line in definition.lines:
+                    # scaling is last part of string
+                    scale = float(line[1].split(' ')[-1])
+                    assert (scale == 0.0) or (scale == 1.0)
+
 
     def apply(self, configuration, seed_kind='full'):
         """Converts a yaff configuration into an OpenMM seed
