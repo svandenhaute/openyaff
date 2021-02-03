@@ -6,7 +6,8 @@ import yaml
 import numpy as np
 from datetime import datetime
 
-from openyaff.utils import determine_rcut, transform_lower_triangular
+from openyaff.utils import determine_rcut, transform_lower_triangular, \
+        compute_lengths_angles, is_lower_triangular
 from openyaff.seeds import YaffSeed
 
 
@@ -48,9 +49,9 @@ class Configuration:
 
         """
         self.periodic = (system.cell._get_nvec() == 3)
-        if self.periodic: # transform system rvecs to lower diagonal form
+        if self.periodic:
             rvecs = system.cell._get_rvecs().copy()
-            transform_lower_triangular(system.pos, rvecs)
+            transform_lower_triangular(system.pos, rvecs, reorder=True)
             system.cell.update_rvecs(rvecs)
         self.system = system
 
@@ -143,6 +144,7 @@ class Configuration:
         # construct FFArgs instance and set properties
         ff_args = yaff.FFArgs()
         if self.periodic and tuple(self.supercell) != (1, 1, 1):
+            # system already in reduced form
             system = self.system.supercell(*self.supercell)
         else:
             system = self.system
@@ -185,6 +187,7 @@ class Configuration:
         """
         rcut *= molmod.units.angstrom
         rvecs = self.system.cell._get_rvecs()
+        assert is_lower_triangular(rvecs)
         current_rcut = 0
         i, j, k = (1, 1, 1)
         while (k < 20) and (current_rcut < rcut): # c vector is last
@@ -195,17 +198,56 @@ class Configuration:
                     supercell = (i, j, k)
                     rvecs_ = np.array(supercell)[:, np.newaxis] * rvecs
                     try:
+                        # compute reduced form to evaluate max rcut
+                        transform_lower_triangular(
+                                np.zeros((1, 3)), # dummy pos
+                                rvecs_,
+                                reorder=True,
+                                )
                         current_rcut = determine_rcut(rvecs_)
                     except ValueError:
                         pass # invalid box vectors, move on to next
                     i += 1
                 j += 1
             k += 1
-        return supercell
+        return list(supercell)
 
     def log(self):
         """Logs information about this configuration"""
-        pass
+        natom = self.system.natom
+        if self.periodic:
+            system_type = 'periodic'
+        else:
+            system_type = 'non-periodic'
+        logger.info('number of atoms:     {}'.format(natom))
+        logger.info('system type:         ' + system_type)
+        logger.info('')
+        if self.periodic:
+            rvecs = self.system.cell._get_rvecs() / molmod.units.angstrom
+            transform_lower_triangular(
+                    np.zeros((1, 3)), # dummy pos
+                    rvecs,
+                    reorder=True,
+                    )
+            lengths, angles = compute_lengths_angles(rvecs, degree=True)
+            logger.info('reduced (!) box vectors (in angstrom):')
+            logger.info('\ta: {}'.format(rvecs[0, :]))
+            logger.info('\tb: {}'.format(rvecs[1, :]))
+            logger.info('\tc: {}'.format(rvecs[2, :]))
+            logger.info('')
+            logger.info('reduced box lengths (in angstrom):')
+            logger.info('\ta: {:.4f}'.format(lengths[0]))
+            logger.info('\tb: {:.4f}'.format(lengths[1]))
+            logger.info('\tc: {:.4f}'.format(lengths[2]))
+            logger.info('')
+            logger.info('reduced box angles (in degrees):')
+            logger.info('\talpha: {:.4f}'.format(angles[0]))
+            logger.info('\tbeta : {:.4f}'.format(angles[1]))
+            logger.info('\tgamma: {:.4f}'.format(angles[2]))
+            logger.info('')
+        logger.info('found {} prefixes:'.format(len(self.prefixes)))
+        for prefix in self.prefixes:
+            logger.info('\t' + prefix)
 
     def write(self, path_config=None):
         """Generates the .yml contents and optionally saves it to a file
@@ -333,7 +375,8 @@ class Configuration:
     supercell:
         determines the supercell to use. OpenMM does not allow interactions
         to reach further than half the *shortest* cell vector in its reduced
-        representation.
+        representation. NOTE: THE SUPERCELL TUPLE REFERS TO THE CELL VECTORS
+        IN THE REDUCED REPRESENTATION, NOT TO THE ORIGINAL CELL VECTORS.
         For most nanoporous materials and cutoff ranges (10 - 15 angstrom),
         this implies that validation with OpenMM is almost always performed on
         supercells of those in the .chk input.

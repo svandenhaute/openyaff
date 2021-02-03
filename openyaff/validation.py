@@ -132,8 +132,9 @@ class Validation:
             value = getattr(self, name)
             if value is not None: # if property is applicable
                 config[name] = value
+        config['kind'] = self.name
 
-        final = {'validations': {self.name: config}}
+        final = {'validations': [config]}
         if path_config is not None:
             assert path_config.suffix == '.yml'
             if path_config.exists():
@@ -141,9 +142,9 @@ class Validation:
                 with open(path_config, 'r') as f:
                     loaded_config = yaml.load(f, Loader=yaml.FullLoader)
                 if 'validations' in loaded_config.keys():
-                    loaded_config['validations'][self.name] = config
+                    loaded_config['validations'].append(config)
                 else:
-                    loaded_config['validations'] = {self.name: config}
+                    loaded_config['validations'] = [config]
                 final = loaded_config
             with open(path_config, 'w') as f:
                 yaml.dump(final, f, default_flow_style=False)
@@ -228,8 +229,10 @@ def load_validations(path_yml):
 
     validations = []
     if 'validations' in list(config.keys()):
-        for name, kwargs in config['validations'].items():
-            assert name in list(validation_cls.keys())
+        assert isinstance(config['validations'], list)
+        for kwargs in config['validations']:
+            assert 'kind' in kwargs.keys()
+            name = kwargs.pop('kind')
             validations.append(
                     validation_cls[name](**kwargs),
                     )

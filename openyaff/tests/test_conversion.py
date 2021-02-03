@@ -298,6 +298,18 @@ def test_check_compatibility():
         seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
 
 
+def test_write_annotate(tmp_path):
+    path_config = tmp_path / 'config.yml'
+    ExplicitConversion().write(path_config)
+    with open(path_config, 'r') as f:
+        content = f.read()
+    assert content == """conversion:
+  kind: explicit
+  pme_error_thres: 1.0e-05
+"""
+    ExplicitConversion.annotate(path_config)
+
+
 #def test_prefix_coverage():
 #    systems = ['mof808', 'cau13', 'ppycof', 'cof5', 'mil53']
 #    for name in systems:

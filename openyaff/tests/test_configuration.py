@@ -6,9 +6,10 @@ from openyaff.utils import yaff_generate
 from systems import get_system, here
 
 
-def test_initialize_write(tmp_path):
+def test_initialize_periodic(tmp_path):
     system, pars = get_system('lennardjones')
     configuration = Configuration(system, pars)
+    configuration.log()
 
     # write defaults
     path_config = tmp_path / 'config.yml'
@@ -26,9 +27,10 @@ def test_initialize_write(tmp_path):
 """ # whitespace matters
 
 
-def test_nonperiodic(tmp_path):
+def test_initialize_nonperiodic(tmp_path):
     system, pars = get_system('alanine')
     configuration = Configuration(system, pars)
+    configuration.log()
 
     # write defaults
     path_config = tmp_path / 'config.yml'
@@ -52,7 +54,7 @@ def test_supercell():
     system, pars = get_system('cobdp')
     configuration = Configuration(system, pars)
     supercell = configuration.determine_supercell(10)
-    assert tuple(supercell) == (4, 1, 3)
+    assert tuple(supercell) == (1, 3, 4)
 
 
 def test_from_files():

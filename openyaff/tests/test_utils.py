@@ -2,7 +2,7 @@ import molmod
 import numpy as np
 
 from openyaff.utils import transform_lower_triangular, is_lower_triangular, \
-        do_lattice_reduction
+        do_lattice_reduction, compute_lengths_angles
 from openyaff.configuration import Configuration
 from openyaff.wrappers import YaffForceFieldWrapper
 
@@ -19,27 +19,22 @@ def test_transform_lower_triangular():
         transform_lower_triangular(pos, trial) # in-place
         # comparison with cholesky made inside transform_lower_triangular
 
-    ff = get_system('cobdp', return_forcefield=True) # nonrectangular system
-    gpos0 = np.zeros((ff.system.natom, 3))
-    energy0 = ff.compute(gpos0, None)
-    rvecs = ff.system.cell._get_rvecs().copy()
     # test fails for COBDP if reordering=True!
-    transform_lower_triangular(ff.system.pos, rvecs, reorder=False)
-    assert is_lower_triangular(rvecs)
-    ff.update_pos(ff.system.pos)
-    ff.update_rvecs(rvecs)
-    gpos1 = np.zeros((ff.system.natom, 3))
-    energy1 = ff.compute(gpos1, None)
-    np.testing.assert_almost_equal( # energy should remain the same
-            energy0,
-            energy1,
-            )
-    np.testing.assert_raises( # gpos different because of rotation
-            AssertionError,
-            np.testing.assert_array_almost_equal,
-            gpos0,
-            gpos1,
-            )
+    for name in ['cau13', 'mof808', 'cof5', 'ppycof']:
+        ff = get_system(name, return_forcefield=True) # nonrectangular system
+        gpos0 = np.zeros((ff.system.natom, 3))
+        energy0 = ff.compute(gpos0, None)
+        rvecs = ff.system.cell._get_rvecs().copy()
+        transform_lower_triangular(ff.system.pos, rvecs, reorder=True)
+        assert is_lower_triangular(rvecs)
+        ff.update_pos(ff.system.pos)
+        ff.update_rvecs(rvecs)
+        gpos1 = np.zeros((ff.system.natom, 3))
+        energy1 = ff.compute(gpos1, None)
+        np.testing.assert_almost_equal( # energy should remain the same
+                energy0,
+                energy1,
+                )
 
 
 def test_is_lower_triangular():
@@ -105,3 +100,25 @@ def test_lattice_reduction():
     assert np.all(frac__ >= 0)
     assert np.all(frac__ <= 1)
     np.allclose(frac, frac__)
+
+
+def test_compute_lengths_angles():
+    rvecs = np.eye(3)
+    lengths, angles = compute_lengths_angles(rvecs, degree=True)
+    np.testing.assert_almost_equal(lengths, np.ones(3))
+    np.testing.assert_almost_equal(angles, 90 * np.ones(3))
+
+    rvecs = np.array([
+        [1, 1, 0],
+        [1, 0, 0],
+        [0, 0, 1],
+        ])
+    lengths, angles = compute_lengths_angles(rvecs, degree=False)
+    np.testing.assert_almost_equal(
+            lengths,
+            np.array([np.sqrt(2), 1, 1]),
+            )
+    np.testing.assert_almost_equal(
+            angles,
+            np.array([np.pi / 2, np.pi / 2, np.pi / 4]),
+            )

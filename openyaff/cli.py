@@ -60,29 +60,49 @@ def validate(cwd):
     for validation in validations:
         validation.run(configuration, conversion)
 
-
-def configure(cwd):
+def convert(cwd, seed_kind):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
+    configuration = Configuration.from_files(*input_files, path_yml)
+    conversion = load_conversion(path_yml)
+    openmm_seed = conversion.apply(configuration, seed_kind)
+    save_openmm_system(openmm_seed.system_mm, cwd / 'system.xml')
 
-    # initialize Configuration based on system files, and create .yml
+
+def initialize(cwd):
+    input_files = get_input_files(cwd, ['.chk', '.txt'])
+    path_yml = cwd / 'config.yml'
+    logger.info('found the following input files:')
+    for file in input_files:
+        logger.info(str(file))
+    logger.info('')
+
+    if path_yml.exists(): # remove file if it exists
+        path_yml.unlink()
+    default_classes = [ # classes for which to initialize .yml keywords
+            ExplicitConversion,
+            SinglePointValidation,
+            ]
+
+    # initialize Configuration based on defaults
     configuration = Configuration.from_files(*input_files)
+    supercell = configuration.determine_supercell(configuration.rcut)
+    configuration.supercell = supercell # smallest usable supercell
+    configuration.log()
     configuration.write(path_yml)
-
-    # initialize default conversion
-    conversion = ExplicitConversion()
-    conversion.write(path_yml)
-
-    # initialize default validation
-    validation = SinglePointValidation()
-    validation.write(path_yml)
+    for default in default_classes:
+        default().write(path_yml)
 
     # add annotations to config file for clarity; this cannot be done using
     # pyyaml and hence proceeds manually
     add_header_to_config(path_yml)
     configuration.annotate(path_yml)
-    conversion.annotate(path_yml)
-    validation.annotate(path_yml)
+    for default in default_classes:
+        default().annotate(path_yml)
+
+    logger.info('')
+    logger.info('writing configuration file to')
+    logger.info(str(path_yml))
 
 
 def main():
@@ -93,15 +113,26 @@ def main():
     parser.add_argument(
             'mode',
             action='store',
-            help='determines mode of operation: configure, validate, test',
+            help='specifies mode of operation'
             )
+    parser.add_argument(
+        '--interaction',
+        help='type of interactions to consider: covalent, dispersion, electrostatic, nonbonded, all',
+        nargs='?',
+        const='all', # default behavior is to include all interactions
+        )
     args = parser.parse_args()
 
     cwd = Path.cwd()
     if args.mode == 'test':
         test()
-    elif args.mode == 'configure':
-        configure(cwd)
+    elif args.mode == 'initialize':
+        initialize(cwd)
+    elif args.mode == 'convert':
+        seed_kind = args.interaction
+        assert seed_kind in ['all', 'covalent', 'dispersion', 'electrostatic', 'all']
+        convert(cwd, seed_kind=seed_kind)
+        pass
     elif args.mode == 'validate':
         validate(cwd)
     else:

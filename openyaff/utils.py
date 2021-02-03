@@ -102,9 +102,20 @@ def transform_lower_triangular(pos, rvecs, reorder=False):
     assert is_lower_triangular(rvecs)
 
 
-def compute_lengths_angles(rvecs):
+def compute_lengths_angles(rvecs, degree=False):
     """Computes and returns the box vector lengths and angles"""
-    raise NotImplementedError
+    lengths = np.linalg.norm(rvecs, axis=1)
+    cosalpha = np.sum(rvecs[1, :] * rvecs[2, :]) / (lengths[1] * lengths[2])
+    cosbeta  = np.sum(rvecs[0, :] * rvecs[2, :]) / (lengths[0] * lengths[2])
+    cosgamma = np.sum(rvecs[1, :] * rvecs[0, :]) / (lengths[1] * lengths[0])
+    if degree:
+        conversion = np.pi / 180.0
+    else:
+        conversion = 1.0
+    alpha = np.arccos(cosalpha) / conversion
+    beta  = np.arccos(cosbeta ) / conversion
+    gamma = np.arccos(cosgamma) / conversion
+    return lengths, np.array([alpha, beta, gamma])
 
 
 def do_lattice_reduction(rvecs):
@@ -223,4 +234,25 @@ The configuration is divided into three parts:
         content = f.read()
     with open(path_yml, 'w') as f:
         f.write('\n'.join(lines))
+        f.write('\n')
         f.write(content)
+
+
+def save_openmm_system(system_mm, path_xml):
+    """Uses the XmlSerializer to store an OpenMM system object
+
+    Parameters
+    ----------
+
+    system_mm : OpenMM.System
+        system instance to serialize
+
+    path_xml : pathlib.Path
+        filepath
+
+    """
+    xml = mm.XmlSerializer.serialize(system_mm)
+    if path_xml.exists():
+        path_xml.unlink() # remove file if it exists
+    with open(path_xml, 'w') as f:
+        f.write(xml)

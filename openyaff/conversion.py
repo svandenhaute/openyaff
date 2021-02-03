@@ -51,7 +51,7 @@ class Conversion:
     @staticmethod
     def annotate(path_yml):
         """Annotates a .yml file with comments regarding the current system"""
-        message = """CONVERSION
+        message = """ CONVERSION
 
         Below is a list of possible keywords for this section.
 
