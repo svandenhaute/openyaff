@@ -69,12 +69,14 @@ def convert(cwd, seed_kind):
     save_openmm_system(openmm_seed.system_mm, cwd / 'system.xml')
 
 
-def initialize(cwd):
+def initialize(cwd, save_reduced=False):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
+    path_xyz = cwd / 'reduced.xyz'
+    path_h5 = cwd / 'reduced.h5'
     logger.info('found the following input files:')
     for file in input_files:
-        logger.info(str(file))
+        logger.info(str(file.name))
     logger.info('')
 
     if path_yml.exists(): # remove file if it exists
@@ -89,6 +91,9 @@ def initialize(cwd):
     supercell = configuration.determine_supercell(configuration.rcut)
     configuration.supercell = supercell # smallest usable supercell
     configuration.log()
+    logger.info('')
+    logger.info('writing configuration file to')
+    logger.info(str(path_yml))
     configuration.write(path_yml)
     for default in default_classes:
         default().write(path_yml)
@@ -100,34 +105,53 @@ def initialize(cwd):
     for default in default_classes:
         default().annotate(path_yml)
 
-    logger.info('')
-    logger.info('writing configuration file to')
-    logger.info(str(path_yml))
+    if save_reduced:
+        if path_xyz.exists():
+            path_xyz.unlink()
+        if path_h5.exists():
+            path_h5.unlink()
+        logger.info('saving YAFF system with reduced box vectors to files')
+        logger.info(str(path_xyz))
+        configuration.system.to_file(str(path_xyz))
+        logger.info(str(path_h5))
+        configuration.system.to_file(str(path_h5))
 
 
 def main():
     print('')
     parser = argparse.ArgumentParser(
             description='conversion and testing of YAFF force fields to OpenMM-compatible format',
+            allow_abbrev=False,
             )
     parser.add_argument(
             'mode',
             action='store',
-            help='specifies mode of operation'
+            choices=['test', 'initialize', 'convert', 'validate'],
+            default='test',
+            help='specifies mode of operation',
             )
     parser.add_argument(
-        '--interaction',
-        help='type of interactions to consider: covalent, dispersion, electrostatic, nonbonded, all',
-        nargs='?',
-        const='all', # default behavior is to include all interactions
-        )
+            '-i',
+            '--interaction',
+            action='store',
+            default='all',
+            choices=['all', 'covalent', 'dispersion', 'electrostatic', 'nonbonded'],
+            help='type of interactions to consider',
+            )
+    parser.add_argument(
+            '-s',
+            '--save-reduced',
+            help='save YAFF system with reduced box vectors',
+            action='store_true',
+            default=False,
+            )
     args = parser.parse_args()
 
     cwd = Path.cwd()
     if args.mode == 'test':
         test()
     elif args.mode == 'initialize':
-        initialize(cwd)
+        initialize(cwd, args.save_reduced)
     elif args.mode == 'convert':
         seed_kind = args.interaction
         assert seed_kind in ['all', 'covalent', 'dispersion', 'electrostatic', 'all']
