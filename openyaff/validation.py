@@ -144,7 +144,7 @@ class Validation:
                     loaded_config['validations'][self.name] = config
                 else:
                     loaded_config['validations'] = {self.name: config}
-                    final = loaded_config
+                final = loaded_config
             with open(path_config, 'w') as f:
                 yaml.dump(final, f, default_flow_style=False)
         return final
@@ -169,11 +169,53 @@ class Validation:
         assert isinstance(value, bool)
         self._separate_parts = value
 
+    @staticmethod
+    def annotate(path_yml):
+        raise NotImplementedError
+
 
 class SinglePointValidation(Validation):
     """Implements a single point validation of energy and forces"""
 
     name = 'singlepoint'
+
+    @staticmethod
+    def annotate(path_yml):
+        """Annotates a .yml file with comments regarding the current system"""
+        message = """ VALIDATION
+
+        The validation generally consists of a series of individual validation
+        experiments. Each experiment (e.g. a single point or stress validation)
+        has its own keywords.
+
+        singlepoint:
+            performs a series of single point calculations on randomly generated
+            states, and compares forces and energies. Allowed keywords for this
+            experiment are:
+
+                tol:
+                    relative tolerance on energy and forces between YAFF and
+                    OpenMM.
+                    (default: 1e-5)"""
+        comments = message.splitlines()
+        for i in range(len(comments)):
+            comments[i] = '#' + comments[i]
+        comments = ['\n\n'] + comments
+
+        with open(path_yml, 'r') as f:
+            content = f.read()
+        lines = content.splitlines()
+
+        index = None
+        for i, line in enumerate(lines):
+            if line.startswith('validations'):
+                assert index is None
+                index = i
+
+        assert index is not None
+        lines = lines[:index] + comments + lines[index:]
+        with open(path_yml, 'w') as f:
+            f.write('\n'.join(lines))
 
 
 def load_validations(path_yml):

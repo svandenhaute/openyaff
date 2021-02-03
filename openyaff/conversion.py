@@ -48,6 +48,42 @@ class Conversion:
                 yaml.dump(final, f, default_flow_style=False)
         return final
 
+    @staticmethod
+    def annotate(path_yml):
+        """Annotates a .yml file with comments regarding the current system"""
+        message = """CONVERSION
+
+        Below is a list of possible keywords for this section.
+
+        kind:
+            specifies the kind of conversion to apply. Currently, only
+            explicit conversions are supported.
+            (default: explicit)
+
+        pme_error_thres:
+            specifies the error threshold for the PME evaluation (only
+            relevant for periodic systems). For more information on the PME
+            evaluation, see openmm.org."""
+        comments = message.splitlines()
+        for i in range(len(comments)):
+            comments[i] = '#' + comments[i]
+        comments = ['\n\n'] + comments
+
+        with open(path_yml, 'r') as f:
+            content = f.read()
+        lines = content.splitlines()
+
+        index = None
+        for i, line in enumerate(lines):
+            if line.startswith('conversion'):
+                assert index is None
+                index = i
+
+        assert index is not None
+        lines = lines[:index] + comments + lines[index:]
+        with open(path_yml, 'w') as f:
+            f.write('\n'.join(lines))
+
 
 class ExplicitConversion(Conversion):
     """Defines the explicit conversion procedure from YAFF to OpenMM

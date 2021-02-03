@@ -4,6 +4,7 @@ import yaff
 import molmod
 import yaml
 import numpy as np
+from datetime import datetime
 
 from openyaff.utils import determine_rcut, transform_lower_triangular
 from openyaff.seeds import YaffSeed
@@ -232,6 +233,9 @@ class Configuration:
                 # load contents and look for 'yaff' to replace
                 with open(path_config, 'r') as f:
                     loaded_config = yaml.load(f, Loader=yaml.FullLoader)
+                    # dict needs to be initialized when reading 'empty' file
+                    if loaded_config is None:
+                        loaded_config = {}
                     loaded_config['yaff'] = config
                 final = loaded_config
             with open(path_config, 'w') as f:
@@ -315,6 +319,72 @@ class Configuration:
             if name in config['yaff'].keys():
                 # following should not raise anything
                 setattr(self, name, config['yaff'][name])
+
+    @staticmethod
+    def annotate(path_yml):
+        """Annotates a .yml file with comments regarding the current system"""
+        message = """ YAFF
+
+    Below is a list of possible keywords for this section. Their applicability
+    depends on the specific system (whether it is periodic, whether it contains
+    charges, ...). Some keywords that appear in the list below may therefore
+    not actually be valid for this specific configuration.
+
+    supercell:
+        determines the supercell to use. OpenMM does not allow interactions
+        to reach further than half the *shortest* cell vector in its reduced
+        representation.
+        For most nanoporous materials and cutoff ranges (10 - 15 angstrom),
+        this implies that validation with OpenMM is almost always performed on
+        supercells of those in the .chk input.
+        By default, OpenYAFF will suggest the smallest possible unit cell that
+        is compatible with the default cutoff distance. Other supercells and
+        their corresponding largest cutoff distance are logged when executing
+        `openyaff configure`.
+        (see http://docs.openmm.org/latest/userguide/theory.html#periodic-boundary-conditions
+        for more information on the reduced cell representation in OpenMM).
+        )
+
+    rcut:
+        cutoff distance of the nonbonded interactions.
+        (default: 10 angstrom)
+
+    switch_width:
+        distance over which dispersion interactions are smoothed to 0.
+        (default: 4 angstrom)
+
+    tailcorrections:
+        whether to use tailcorrections for the dispersion interactions.
+        (default: False)
+
+    ewald_alphascale:
+        alpha scale parameter for the ewald summation in case of periodic
+        electrostatics. (see yaff.pes.generator.FFArgs for more information
+        and default values)
+
+    ewald_gcutscale:
+        gcut scale parameter for the ewald summation in case of periodic
+        electrostatics. (see yaff.pes.generator.FFArgs for more information
+        and default values)"""
+        comments = message.splitlines()
+        for i in range(len(comments)):
+            comments[i] = '#' + comments[i]
+        comments = ['\n\n'] + comments
+
+        with open(path_yml, 'r') as f:
+            content = f.read()
+        lines = content.splitlines()
+
+        index = None
+        for i, line in enumerate(lines):
+            if line.startswith('yaff'):
+                assert index is None
+                index = i
+
+        assert index is not None
+        lines = lines[:index] + comments + lines[index:]
+        with open(path_yml, 'w') as f:
+            f.write('\n'.join(lines))
 
     @property
     def supercell(self):

@@ -4,6 +4,7 @@ import yaff
 
 from pathlib import Path
 
+from openyaff.utils import add_header_to_config
 from openyaff import Configuration, load_conversion, load_validations, \
         ExplicitConversion, SinglePointValidation
 
@@ -75,6 +76,13 @@ def configure(cwd):
     # initialize default validation
     validation = SinglePointValidation()
     validation.write(path_yml)
+
+    # add annotations to config file for clarity; this cannot be done using
+    # pyyaml and hence proceeds manually
+    add_header_to_config(path_yml)
+    configuration.annotate(path_yml)
+    conversion.annotate(path_yml)
+    validation.annotate(path_yml)
 
 
 def main():
