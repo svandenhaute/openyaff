@@ -17,7 +17,10 @@ def test_initialize_write(tmp_path):
         content = f.read()
     assert content == """yaff:
   rcut: 10.0
-  supercell: [1, 1, 1]
+  supercell:
+  - 1
+  - 1
+  - 1
   switch_width: 4.0
   tailcorrections: false
 """ # whitespace matters

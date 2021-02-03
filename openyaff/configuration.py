@@ -5,7 +5,7 @@ import molmod
 import yaml
 import numpy as np
 
-from openyaff.utils import determine_rcut, transform_lower_diagonal
+from openyaff.utils import determine_rcut, transform_lower_triangular
 from openyaff.seeds import YaffSeed
 
 
@@ -49,7 +49,7 @@ class Configuration:
         self.periodic = (system.cell._get_nvec() == 3)
         if self.periodic: # transform system rvecs to lower diagonal form
             rvecs = system.cell._get_rvecs().copy()
-            transform_lower_diagonal(system.pos, rvecs)
+            transform_lower_triangular(system.pos, rvecs)
             system.cell.update_rvecs(rvecs)
         self.system = system
 
@@ -209,6 +209,9 @@ class Configuration:
     def write(self, path_config=None):
         """Generates the .yml contents and optionally saves it to a file
 
+        If the file already exists, then the contents of the 'yaff' key are
+        overwritten with the current values
+
         Parameters
         ----------
 
@@ -216,19 +219,24 @@ class Configuration:
             specifies the location of the output .yml file
 
         """
-        config = { # initialize config with yaff section
-                'yaff': {},
-                }
+        config = {}
         for name in self.properties:
             value = getattr(self, name)
             if value is not None: # if property is applicable
-                config['yaff'][name] = value
+                config[name] = value
 
+        final = {'yaff': config}
         if path_config is not None:
             assert path_config.suffix == '.yml'
+            if path_config.exists():
+                # load contents and look for 'yaff' to replace
+                with open(path_config, 'r') as f:
+                    loaded_config = yaml.load(f, Loader=yaml.FullLoader)
+                    loaded_config['yaff'] = config
+                final = loaded_config
             with open(path_config, 'w') as f:
-                yaml.dump(config, f, default_flow_style=None)
-        return config
+                yaml.dump(final, f, default_flow_style=False)
+        return final
 
     @staticmethod
     def from_files(path_system, path_pars, path_config=None):

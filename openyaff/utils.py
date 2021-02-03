@@ -5,12 +5,12 @@ import simtk.unit as unit
 import simtk.openmm as mm
 
 
-def is_lower_diagonal(rvecs):
-    """Returns whether rvecs is in lower diagonal form
+def is_lower_triangular(rvecs):
+    """Returns whether rvecs is in standardized lower diagonal form
 
     OpenMM puts requirements on the components of the box vectors.
     Essentially, rvecs has to be a lower triangular positive definite matrix
-    where additionally (a_x > 2*b_x), (a_x > 2*c_x), and (b_y > 2*c_y).
+    where additionally (a_x > 2*|b_x|), (a_x > 2*|c_x|), and (b_y > 2*|c_y|).
 
     Parameters
     ----------
@@ -40,7 +40,7 @@ def determine_rcut(rvecs):
         (3, 3) array with box vectors as rows
 
     """
-    if not is_lower_diagonal(rvecs):
+    if not is_lower_triangular(rvecs):
         raise ValueError('Box vectors are not in reduced form')
     else:
         return min([
@@ -50,7 +50,7 @@ def determine_rcut(rvecs):
                 ]) / 2
 
 
-def transform_lower_diagonal(pos, rvecs, reorder=False):
+def transform_lower_triangular(pos, rvecs, reorder=False):
     """Transforms coordinate axes such that cell matrix is lower diagonal
 
     The transformation is derived from the QR decomposition and performed
@@ -89,6 +89,15 @@ def transform_lower_diagonal(pos, rvecs, reorder=False):
     rvecs[0, 1] = 0
     rvecs[0, 2] = 0
     rvecs[1, 2] = 0
+
+    # replace c and b with shortest possible vectors to ensure 
+    # b_y > |2 c_y|
+    # b_x > |2 c_x|
+    # a_x > |2 b_x|
+    rvecs[2, :] = rvecs[2, :] - rvecs[1, :] * np.round(rvecs[2, 1] / rvecs[1, 1])
+    rvecs[2, :] = rvecs[2, :] - rvecs[0, :] * np.round(rvecs[2, 0] / rvecs[0, 0])
+    rvecs[1, :] = rvecs[1, :] - rvecs[0, :] * np.round(rvecs[1, 0] / rvecs[0, 0])
+    assert is_lower_triangular(rvecs)
 
 
 def compute_lengths_angles(rvecs):

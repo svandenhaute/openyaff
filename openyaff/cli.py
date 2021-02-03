@@ -4,7 +4,8 @@ import yaff
 
 from pathlib import Path
 
-from openyaff import Configuration, load_conversion, load_validations
+from openyaff import Configuration, load_conversion, load_validations, \
+        ExplicitConversion, SinglePointValidation
 
 
 yaff.log.set_level(yaff.log.silent)
@@ -62,8 +63,18 @@ def validate(cwd):
 def configure(cwd):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
+
+    # initialize Configuration based on system files, and create .yml
     configuration = Configuration.from_files(*input_files)
     configuration.write(path_yml)
+
+    # initialize default conversion
+    conversion = ExplicitConversion()
+    conversion.write(path_yml)
+
+    # initialize default validation
+    validation = SinglePointValidation()
+    validation.write(path_yml)
 
 
 def main():

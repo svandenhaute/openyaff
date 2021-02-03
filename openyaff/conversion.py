@@ -9,6 +9,44 @@ from openyaff.seeds import OpenMMSeed
 class Conversion:
     """Base class for conversion objects"""
     kind = None
+    properties = []
+
+    def __init__(self):
+        """Constructor; should initialize properties to default values"""
+        pass
+
+    def write(self, path_config=None):
+        """Generates the .yml contents and optionally saves it to a file
+
+        If the file already exists, then the contents of the 'conversion' key
+        are overwritten with the current values
+
+        Parameters
+        ----------
+
+        path_config : pathlib.Path, optional
+            specifies the location of the output .yml file
+
+        """
+        config = {}
+        for name in self.properties:
+            value = getattr(self, name)
+            if value is not None: # if property is applicable
+                config[name] = value
+        config['kind'] = self.kind
+
+        final = {'conversion': config}
+        if path_config is not None:
+            assert path_config.suffix == '.yml'
+            if path_config.exists():
+                # load contents and look for 'conversion' to replace
+                with open(path_config, 'r') as f:
+                    loaded_config = yaml.load(f, Loader=yaml.FullLoader)
+                    loaded_config['conversion'] = config
+                final = loaded_config
+            with open(path_config, 'w') as f:
+                yaml.dump(final, f, default_flow_style=False)
+        return final
 
 
 class ExplicitConversion(Conversion):
@@ -20,18 +58,11 @@ class ExplicitConversion(Conversion):
 
     """
     kind = 'explicit'
+    properties = [
+            'pme_error_thres',
+            ]
 
     def __init__(self, pme_error_thres=1e-5):
-        """Constructor
-
-        Parameters
-        ----------
-
-        pme_error_thres : float
-            determines the threshold for the error tolerance in the
-            NonbondedForce PME evaluation
-
-        """
         self.pme_error_thres = pme_error_thres
 
     def check_compatibility(self, configuration):
@@ -107,9 +138,18 @@ class ExplicitConversion(Conversion):
         openmm_seed = OpenMMSeed(system_mm)
         return openmm_seed
 
+    @property
+    def pme_error_thres(self):
+        """Returns the error threshold for the PME calculation"""
+        return self._pme_error_thres
 
-def load_conversion(path_ini):
-    with open(path_ini, 'r') as f:
+    @pme_error_thres.setter
+    def pme_error_thres(self, value):
+        self._pme_error_thres = value
+
+
+def load_conversion(path_config):
+    with open(path_config, 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     assert 'conversion' in list(config.keys())
     config_conversion = config['conversion']

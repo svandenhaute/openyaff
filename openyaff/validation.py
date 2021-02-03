@@ -15,10 +15,12 @@ class Validation:
 
     """
     name = None
-    wrapper_class_yaff = None
-    wrapper_class_openmm = None
+    properties = [
+            'platforms',
+            'separate_parts',
+            ]
 
-    def __init__(self, platforms=['Reference'], separate_parts=True):
+    def __init__(self, platforms=['Reference'], separate_parts=True, **kwargs):
         """Constructor
 
         Parameters
@@ -34,6 +36,9 @@ class Validation:
         """
         self.platforms = platforms
         self.separate_parts = separate_parts
+        for key, value in kwargs.items():
+            assert key in self.properties
+            setattr(self, key, value)
 
     def run(self, configuration, conversion):
         """Validates the conversion of a given configuration
@@ -74,14 +79,6 @@ class Validation:
             should be validated against each other.
 
         """
-        wrappers = {
-                'yaff': {},
-                'openmm': {},
-                }
-        results = {
-                'yaff': {},
-                'openmm': {},
-                }
         self.log()
         for platform in self.platforms:
             if self.separate_parts: # generate wrapper for each part of the FF
@@ -89,22 +86,7 @@ class Validation:
             else:
                 seed_kinds = ['full']
             for kind in seed_kinds:
-                seed_yaff = configuration.create_seed(kind=kind)
-                seed_mm = conversion.apply(configuration, seed_kind=kind)
-                wrapper_yaff = self.wrapper_class_yaff.from_seed(seed_yaff)
-                wrapper_mm = self.wrapper_class_openmm.from_seed(
-                        seed_mm,
-                        platform,
-                        )
-                result_yaff, result_mm = self._internal_validate(
-                        wrapper_yaff,
-                        wrapper_mm,
-                        )
-                wrappers['yaff'][kind] = wrapper_yaff
-                wrappers['openmm'][kind] = wrapper_mm
-
-        successful = self.parse_results(results) # does logging and comparison
-        return successful
+                self._internal_validate(platform, kind)
 
     def log(self):
         """Logs information prior to running the validation"""
@@ -132,32 +114,81 @@ class Validation:
         """
         raise NotImplementedError
 
+    def write(self, path_config=None):
+        """Generates the .yml contents and optionally saves it to a file
+
+        If the file already exists, then the contents of the 'yaff' key are
+        overwritten with the current values
+
+        Parameters
+        ----------
+
+        path_config : pathlib.Path, optional
+            specifies the location of the output .yml file
+
+        """
+        config = {}
+        for name in self.properties:
+            value = getattr(self, name)
+            if value is not None: # if property is applicable
+                config[name] = value
+
+        final = {'validations': {self.name: config}}
+        if path_config is not None:
+            assert path_config.suffix == '.yml'
+            if path_config.exists():
+                # load contents and look for 'yaff' key, replace contents
+                with open(path_config, 'r') as f:
+                    loaded_config = yaml.load(f, Loader=yaml.FullLoader)
+                if 'validations' in loaded_config.keys():
+                    loaded_config['validations'][self.name] = config
+                else:
+                    loaded_config['validations'] = {self.name: config}
+                    final = loaded_config
+            with open(path_config, 'w') as f:
+                yaml.dump(final, f, default_flow_style=False)
+        return final
+
+    @property
+    def platforms(self):
+        return self._platforms
+
+    @platforms.setter
+    def platforms(self, value):
+        assert isinstance(value, list)
+        for key in value:
+            assert key in ['Reference', 'CPU', 'CUDA', 'OpenCL']
+        self._platforms = list(value)
+
+    @property
+    def separate_parts(self):
+        return self._separate_parts
+
+    @separate_parts.setter
+    def separate_parts(self, value):
+        assert isinstance(value, bool)
+        self._separate_parts = value
+
 
 class SinglePointValidation(Validation):
     """Implements a single point validation of energy and forces"""
 
     name = 'singlepoint'
-    wrapper_class_yaff   = YaffForceFieldWrapper
-    wrapper_class_openmm = OpenMMForceFieldWrapper
 
 
 def load_validations(path_yml):
     with open(path_yml, 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
-
-    configs_validation = config['validations'] # list of configs
-
     validation_cls = {}
     for x in list(globals().values()):
         if isinstance(x, type) and issubclass(x, Validation):
             validation_cls[x.name] = x
 
     validations = []
-    for _ in configs_validation:
-        name = list(_.keys())[0]
-        kwargs = _[name]
-        assert name in list(validation_cls.keys())
-        validations.append(
-                validation_cls[name](**kwargs),
-                )
+    if 'validations' in list(config.keys()):
+        for name, kwargs in config['validations'].items():
+            assert name in list(validation_cls.keys())
+            validations.append(
+                    validation_cls[name](**kwargs),
+                    )
     return validations

@@ -1,7 +1,7 @@
 import molmod
 import numpy as np
 
-from openyaff.utils import transform_lower_diagonal, is_lower_diagonal, \
+from openyaff.utils import transform_lower_triangular, is_lower_triangular, \
         do_lattice_reduction
 from openyaff.configuration import Configuration
 from openyaff.wrappers import YaffForceFieldWrapper
@@ -9,22 +9,23 @@ from openyaff.wrappers import YaffForceFieldWrapper
 from systems import get_system
 
 
-def test_transform_lower_diagonal():
+def test_transform_lower_triangular():
     for i in range(100):
         trial = np.random.uniform(-20, 20, size=(3, 3))
         trial *= np.sign(np.linalg.det(trial))
         assert np.linalg.det(trial) > 0
         pos   = np.random.uniform(-100, 100, size=(10, 3))
         manual = np.linalg.cholesky(trial @ trial.T)
-        transform_lower_diagonal(pos, trial) # in-place
-        # comparison with cholesky made inside transform_lower_diagonal
+        transform_lower_triangular(pos, trial) # in-place
+        # comparison with cholesky made inside transform_lower_triangular
 
     ff = get_system('cobdp', return_forcefield=True) # nonrectangular system
     gpos0 = np.zeros((ff.system.natom, 3))
     energy0 = ff.compute(gpos0, None)
     rvecs = ff.system.cell._get_rvecs().copy()
     # test fails for COBDP if reordering=True!
-    transform_lower_diagonal(ff.system.pos, rvecs, reorder=False)
+    transform_lower_triangular(ff.system.pos, rvecs, reorder=False)
+    assert is_lower_triangular(rvecs)
     ff.update_pos(ff.system.pos)
     ff.update_rvecs(rvecs)
     gpos1 = np.zeros((ff.system.natom, 3))
@@ -41,31 +42,31 @@ def test_transform_lower_diagonal():
             )
 
 
-def test_is_lower_diagonal():
+def test_is_lower_triangular():
     trial = np.array([
         [5, 0, 0],
         [2, 3, 0],
         [1, 2, 1], # c_y too large
         ])
-    assert not is_lower_diagonal(trial)
+    assert not is_lower_triangular(trial)
     trial = np.array([
         [5, 0, 0],
         [3, 3, 0], # b_x too large
         [1, 1, 1],
         ])
-    assert not is_lower_diagonal(trial)
+    assert not is_lower_triangular(trial)
     trial = np.array([
         [5, 0, 0],
         [1, 3, 0],
         [1, 1, 0], # c_x nonpositive
         ])
-    assert not is_lower_diagonal(trial)
+    assert not is_lower_triangular(trial)
 
 
 def test_lattice_reduction():
     system, pars = get_system('cobdp')
     rvecs = system.cell._get_rvecs().copy()
-    assert not is_lower_diagonal(rvecs)
+    assert not is_lower_triangular(rvecs)
     configuration = Configuration(system, pars)
     seed = configuration.create_seed('full')
     wrapper = YaffForceFieldWrapper.from_seed(seed)
