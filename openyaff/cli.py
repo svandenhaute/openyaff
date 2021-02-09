@@ -60,6 +60,7 @@ def validate(cwd):
     for validation in validations:
         validation.run(configuration, conversion)
 
+
 def convert(cwd, seed_kind):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'

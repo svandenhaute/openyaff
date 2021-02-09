@@ -74,9 +74,9 @@ class ForceFieldWrapper:
             else:
                 return energy
 
-    def estimate_stress(self, positions, rvecs):
-        """Estimates the virial stress using a finite difference scheme"""
-        raise NotImplementedError
+    def compute_stress(self, positions, rvecs):
+        """Computes the virial stress using a finite difference scheme"""
+        pass
 
     def _internal_evaluate(self, positions, rvecs, do_forces):
         raise NotImplementedError

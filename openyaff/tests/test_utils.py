@@ -2,7 +2,7 @@ import molmod
 import numpy as np
 
 from openyaff.utils import transform_lower_triangular, is_lower_triangular, \
-        do_lattice_reduction, compute_lengths_angles
+        do_lattice_reduction, compute_lengths_angles, estimate_virial_stress
 from openyaff.configuration import Configuration
 from openyaff.wrappers import YaffForceFieldWrapper
 
@@ -122,3 +122,22 @@ def test_compute_lengths_angles():
             angles,
             np.array([np.pi / 2, np.pi / 2, np.pi / 4]),
             )
+
+
+def test_estimate_virial_stress():
+    ff = get_system('uio66', return_forcefield=True)
+
+    def energy_func(positions, rvecs):
+        ff.update_pos(positions * molmod.units.angstrom)
+        ff.update_rvecs(rvecs * molmod.units.angstrom)
+        return ff.compute() / molmod.units.kjmol
+
+    positions = ff.system.pos.copy() / molmod.units.angstrom
+    rvecs = ff.system.cell._get_rvecs().copy() / molmod.units.angstrom
+    vtens = np.zeros((3, 3))
+    ff.compute(None, vtens)
+    vtens /= (molmod.units.kjmol / molmod.units.angstrom)
+
+    dUdh = estimate_virial_stress(positions, rvecs, energy_func, dh=0.1)
+    print('exact: ', vtens)
+    print('numerical: ', dUdh)

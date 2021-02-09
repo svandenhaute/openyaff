@@ -256,3 +256,46 @@ def save_openmm_system(system_mm, path_xml):
         path_xml.unlink() # remove file if it exists
     with open(path_xml, 'w') as f:
         f.write(xml)
+
+
+def estimate_energy_derivative(positions, rvecs, energy_func, dh=0.1):
+    """Approximates the virial stress using a finite difference scheme
+
+    Parameters
+    ----------
+
+    positions : array-like [angstrom]
+        current atomic positions
+
+    rvecs : array-like [angstrom]
+        current rvecs
+
+    energy_func : function
+        function which accepts positions and rvecs as arguments (in angstrom)
+        and returns the energy in kJ/mol
+
+    dh : float [angstrom]
+        determines box vector increments
+
+    """
+    fractional = np.dot(positions, np.linalg.inv(rvecs))
+    dUdh = np.zeros((3, 3))
+
+    indices = [(0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (2, 2)]
+    for index in indices:
+        rvecs_ = rvecs.copy()
+        rvecs_[index] -= dh / 2
+        E_minus = energy_func(
+                np.dot(fractional, rvecs_), # new pos
+                rvecs,
+                )
+
+        rvecs_[index] += dh
+        E_pluss = energy_func(
+                np.dot(fractional, rvecs_), # new pos
+                rvecs,
+                )
+        dUdh[index] = (E_pluss - E_minus) / dh
+
+    return (dUdh + dUdh.T) / 2 # symmetrize
+

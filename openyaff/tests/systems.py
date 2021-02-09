@@ -125,6 +125,16 @@ def ppycof(return_forcefield=False):
     return system, pars
 
 
+def uio66(return_forcefield=False):
+    """Generate CoBDP system from YAFF input files"""
+    path_system = str(here / 'uio66' / 'system.chk')
+    path_pars = str(here / 'uio66' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    with open(path_pars, 'r') as f:
+        pars = f.read()
+    return system, pars
+
+
 def alanine(return_forcefield=False):
     path_system = str(here / 'alanine' / 'system.chk')
     path_pars = str(here / 'alanine' / 'pars.txt')
@@ -148,6 +158,8 @@ def get_system(name, return_forcefield=False, **kwargs):
     elif name == 'mof808':
         system, pars = mof808(**kwargs)
     elif name == 'ppycof':
+        system, pars = ppycof(**kwargs)
+    elif name == 'uio66':
         system, pars = ppycof(**kwargs)
     elif name == 'alanine':
         system, pars = alanine(**kwargs)
