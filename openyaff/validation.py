@@ -101,6 +101,7 @@ class Validation:
         n = 40
         logger.info('=' * n + '  ' + self.name + '  ' + '=' * n)
         logger.info('')
+        logger.info('')
         logger.info('validating the following OpenMM platforms:')
         for platform in self.platforms:
             logger.info('\t\t' + platform)
@@ -285,50 +286,55 @@ class SinglePointValidation(Validation):
         logger.info('')
         logger.info('-' * 80)
         logger.info('\t\tPLATFORM: {} \t\t INTERACTION: {}'.format(platform, kind))
-        logger.info('')
-        nspaces = 10
-        header = '     YAFF [kJ/mol]'
-        header += nspaces * ' '
-        header += '  OpenMM [kJ/mol]'
-        header += nspaces * ' '
-        header += 'relative error [max: {:10.4e}]'.format(energy_tol_)
-        logger.info(header)
+        prefixes = configuration.get_prefixes(kind)
+        if len(prefixes) > 0: # ignore empty parts
+            logger.info('')
+            nspaces = 10
+            header = '     YAFF [kJ/mol]'
+            header += nspaces * ' '
+            header += '  OpenMM [kJ/mol]'
+            header += nspaces * ' '
+            header += 'relative error [max: {:10.4e}]'.format(energy_tol_)
+            logger.info(header)
 
-        for i, state in enumerate(states):
-            energy[0, i], forces[0, i] = wrapper_yaff.evaluate(
-                    *state,
-                    do_forces=True,
-                    )
-            energy[1, i], forces[1, i] = wrapper_mm.evaluate(
-                    *state,
-                    do_forces=True,
-                    )
-            energy[2, i] = np.abs(energy[1, i] - energy[0, i])
-            energy[2, i] /= np.abs(energy[0, i])
-            line = ' {:17.4f}'.format(energy[0, i])
+            for i, state in enumerate(states):
+                energy[0, i], forces[0, i] = wrapper_yaff.evaluate(
+                        *state,
+                        do_forces=True,
+                        )
+                energy[1, i], forces[1, i] = wrapper_mm.evaluate(
+                        *state,
+                        do_forces=True,
+                        )
+                energy[2, i] = np.abs(energy[1, i] - energy[0, i])
+                energy[2, i] /= np.abs(energy[0, i])
+                line = ' {:17.4f}'.format(energy[0, i])
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(energy[1, i])
+                line += nspaces * ' '
+                line += '{:14.4e}'.format(energy[2, i])
+                line += nspaces * ' '
+                logger.info(line)
+
+            df = np.abs(forces[1, :] - forces[0, :])
+            error = np.linalg.norm(df, axis=2)
+            norm = np.mean(np.linalg.norm(forces[0, :], axis=2))
+            logger.info('')
+            nspaces = 4
+            line = '\tFORCES RELATIVE ERROR: \t'
+            line += 'mean={:.1e}'.format(np.mean(error) / norm)
             line += nspaces * ' '
-            line += '{:17.4f}'.format(energy[1, i])
+            line += 'median={:.1e}'.format(np.median(error) / norm)
             line += nspaces * ' '
-            line += '{:14.4e}'.format(energy[2, i])
+            line += 'min={:.1e}'.format(np.min(error) / norm)
             line += nspaces * ' '
+            line += 'max={:.1e}'.format(np.max(error) / norm)
             logger.info(line)
-
-        df = np.abs(forces[1, :] - forces[0, :])
-        error = np.linalg.norm(df, axis=2)
-        norm = np.mean(np.linalg.norm(forces[0, :], axis=2))
-        logger.info('')
-        nspaces = 4
-        line = '\tFORCES RELATIVE ERROR: \t'
-        line += 'mean={:.1e}'.format(np.mean(error) / norm)
-        line += nspaces * ' '
-        line += 'median={:.1e}'.format(np.median(error) / norm)
-        line += nspaces * ' '
-        line += 'min={:.1e}'.format(np.min(error) / norm)
-        line += nspaces * ' '
-        line += 'max={:.1e}'.format(np.max(error) / norm)
-        logger.info(line)
-        logger.info('')
-
+            logger.info('')
+        else:
+            logger.info('')
+            logger.info('\tno {} interactions present'.format(kind))
+            logger.info('')
 
     @staticmethod
     def annotate(path_yml):
@@ -367,6 +373,16 @@ class SinglePointValidation(Validation):
         lines = lines[:index] + comments + lines[index:]
         with open(path_yml, 'w') as f:
             f.write('\n'.join(lines))
+
+    def log(self):
+        Validation.log(self)
+        logger.info('using single point calculations over {} '
+                'random states:'.format(self.nstates))
+        logger.info('\t\tparticle displacement amplitude: {} angstrom'.format(
+                self.disp_ampl))
+        logger.info('\t\tbox vector displacement amplitude: {} angstrom'.format(
+                self.box_ampl))
+        logger.info('')
 
 
 def load_validations(path_yml):

@@ -8,7 +8,25 @@ from datetime import datetime
 
 
 def is_lower_triangular(rvecs):
-    """Returns whether rvecs is in standardized lower diagonal form
+    """Returns whether rvecs are in lower triangular form
+
+    Parameters
+    ----------
+
+    rvecs : array_like
+        (3, 3) array with box vectors as rows
+
+    """
+    return (rvecs[0, 0] > 0 and # positive volumes
+            rvecs[1, 1] > 0 and
+            rvecs[2, 2] > 0 and
+            rvecs[0, 1] == 0 and # lower triangular
+            rvecs[0, 2] == 0 and
+            rvecs[1, 2] == 0)
+
+
+def is_reduced(rvecs):
+    """Returns whether rvecs are in reduced form
 
     OpenMM puts requirements on the components of the box vectors.
     Essentially, rvecs has to be a lower triangular positive definite matrix
@@ -24,32 +42,7 @@ def is_lower_triangular(rvecs):
     return (rvecs[0, 0] > abs(2 * rvecs[1, 0]) and # b mostly along y axis
             rvecs[0, 0] > abs(2 * rvecs[2, 0]) and # z mostly along z axis
             rvecs[1, 1] > abs(2 * rvecs[2, 1]) and # z mostly along z axis
-            rvecs[0, 0] > 0 and # positive volumes
-            rvecs[1, 1] > 0 and
-            rvecs[2, 2] > 0 and
-            rvecs[0, 1] == 0 and # lower triangular
-            rvecs[0, 2] == 0 and
-            rvecs[1, 2] == 0)
-
-
-def determine_rcut(rvecs):
-    """Determines the maximum allowed cutoff radius of rvecs
-
-    Parameters
-    ----------
-
-    rvecs : array_like
-        (3, 3) array with box vectors as rows
-
-    """
-    if not is_lower_triangular(rvecs):
-        raise ValueError('Box vectors are not in reduced form')
-    else:
-        return min([
-                rvecs[0, 0],
-                rvecs[1, 1],
-                rvecs[2, 2],
-                ]) / 2
+            is_lower_triangular(rvecs))
 
 
 def transform_lower_triangular(pos, rvecs, reorder=False):
@@ -60,6 +53,7 @@ def transform_lower_triangular(pos, rvecs, reorder=False):
     of off-diagonal elements, lattice vectors are by default reordered from
     largest to smallest; this feature can be disabled using the reorder
     keyword.
+    The box vector lengths and angles remain exactly the same.
 
     Parameters
     ----------
@@ -70,7 +64,8 @@ def transform_lower_triangular(pos, rvecs, reorder=False):
     rvecs : array_like
         (3, 3) array with box vectors as rows
 
-    reorder
+    reorder : bool
+        whether box vectors are reordered from largest to smallest
 
     """
     if reorder: # reorder box vectors as k, l, m with |k| >= |l| >= |m|
@@ -92,6 +87,63 @@ def transform_lower_triangular(pos, rvecs, reorder=False):
     rvecs[0, 2] = 0
     rvecs[1, 2] = 0
 
+
+def transform_symmetric(pos, rvecs):
+    """Transforms coordinate axes such that cell matrix is lower diagonal
+
+    Parameters
+    ----------
+
+    pos : array_like
+        (natoms, 3) array containing atomic positions
+
+    rvecs : array_like
+        (3, 3) array with box vectors as rows
+
+    """
+    U, s, Vt = np.linalg.svd(rvecs)
+    rot_mat = np.dot(Vt.T, U.T)
+    rvecs[:] = np.dot(rvecs, rot_mat)
+    pos[:] = np.dot(pos, rot_mat)
+
+
+def determine_rcut(rvecs):
+    """Determines the maximum allowed cutoff radius of rvecs
+
+    Parameters
+    ----------
+
+    rvecs : array_like
+        (3, 3) array with box vectors as rows
+
+    """
+    if not is_reduced(rvecs):
+        raise ValueError('Box vectors are not in reduced form')
+    else:
+        return min([
+                rvecs[0, 0],
+                rvecs[1, 1],
+                rvecs[2, 2],
+                ]) / 2
+
+
+def reduce_box_vectors(rvecs):
+    """Uses linear combinations of box vectors to obtain the reduced form
+
+    The reduced form of a cell matrix is lower triangular, with additional
+    constraints that enforce vector b to lie mostly along the y-axis and vector
+    c to lie mostly along the z axis.
+
+    Parameters
+    ----------
+
+    rvecs : array_like
+        (3, 3) array with box vectors as rows. These should already by in
+        lower triangular form.
+
+    """
+    # simple reduction algorithm only works on lower triangular cell matrices
+    assert is_lower_triangular(rvecs)
     # replace c and b with shortest possible vectors to ensure 
     # b_y > |2 c_y|
     # b_x > |2 c_x|
@@ -99,7 +151,6 @@ def transform_lower_triangular(pos, rvecs, reorder=False):
     rvecs[2, :] = rvecs[2, :] - rvecs[1, :] * np.round(rvecs[2, 1] / rvecs[1, 1])
     rvecs[2, :] = rvecs[2, :] - rvecs[0, :] * np.round(rvecs[2, 0] / rvecs[0, 0])
     rvecs[1, :] = rvecs[1, :] - rvecs[0, :] * np.round(rvecs[1, 0] / rvecs[0, 0])
-    assert is_lower_triangular(rvecs)
 
 
 def compute_lengths_angles(rvecs, degree=False):
@@ -118,7 +169,7 @@ def compute_lengths_angles(rvecs, degree=False):
     return lengths, np.array([alpha, beta, gamma])
 
 
-def do_lattice_reduction(rvecs):
+def do_gram_schmidt_reduction(rvecs):
     """Transforms a triclinic cell into a rectangular cell
 
     The algorithm is described in Bekker (1997). Essentially, it performs a
@@ -258,8 +309,12 @@ def save_openmm_system(system_mm, path_xml):
         f.write(xml)
 
 
-def estimate_energy_derivative(positions, rvecs, energy_func, dh=0.1):
+def estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5,
+        use_triangular_perturbation=False):
     """Approximates the virial stress using a finite difference scheme
+
+    Finite differences are only considered in nonzero cell matrix components.
+    I.e. for lower triangular cells, upper triagonal zeros are not perturbed.
 
     Parameters
     ----------
@@ -277,25 +332,39 @@ def estimate_energy_derivative(positions, rvecs, energy_func, dh=0.1):
     dh : float [angstrom]
         determines box vector increments
 
+    use_triangular_perturbation : bool
+        determines whether finite differences are computed in all nine
+        components or only in the six lower triangular components.
+
     """
     fractional = np.dot(positions, np.linalg.inv(rvecs))
     dUdh = np.zeros((3, 3))
+    if use_triangular_perturbation:
+        indices = [
+                (0, 0),
+                (1, 0), (1, 1),
+                (2, 0), (2, 1), (2, 2),
+                ]
+    else:
+        indices = [
+                (0, 0), (0, 1), (0, 2),
+                (1, 0), (1, 1), (1, 2),
+                (2, 0), (2, 1), (2, 2),
+                ]
 
-    indices = [(0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (2, 2)]
-    for index in indices:
-        rvecs_ = rvecs.copy()
-        rvecs_[index] -= dh / 2
-        E_minus = energy_func(
-                np.dot(fractional, rvecs_), # new pos
-                rvecs,
-                )
-
-        rvecs_[index] += dh
-        E_pluss = energy_func(
-                np.dot(fractional, rvecs_), # new pos
-                rvecs,
-                )
-        dUdh[index] = (E_pluss - E_minus) / dh
-
-    return (dUdh + dUdh.T) / 2 # symmetrize
-
+    for i in range(3):
+        for j in range(3):
+            if (i, j) in indices:
+                rvecs_ = rvecs.copy()
+                rvecs_[i, j] -= dh / 2
+                E_minus = energy_func(
+                        np.dot(fractional, rvecs_), # new pos
+                        rvecs_,
+                        )
+                rvecs_[i, j] += dh
+                E_pluss = energy_func(
+                        np.dot(fractional, rvecs_), # new pos
+                        rvecs_,
+                        )
+                dUdh[i, j] = (E_pluss - E_minus) / dh
+    return dUdh

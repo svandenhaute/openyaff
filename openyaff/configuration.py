@@ -9,9 +9,25 @@ from datetime import datetime
 from openyaff.utils import determine_rcut, transform_lower_triangular, \
         compute_lengths_angles, is_lower_triangular
 from openyaff.seeds import YaffSeed
+import openyaff.generator
 
 
 logger = logging.getLogger(__name__) # logging per module
+
+
+# determine supported covalent, dispersion and electrostatic prefixes
+COVALENT_PREFIXES      = []
+DISPERSION_PREFIXES    = []
+ELECTROSTATIC_PREFIXES = ['FIXQ'] # FIXQ is only electrostatic prefix
+for x in list(openyaff.generator.__dict__.values()):
+    if isinstance(x, type) and issubclass(x, yaff.Generator) and x.prefix is not None:
+        if (issubclass(x, openyaff.generator.ValenceMirroredGenerator) or
+                issubclass(x, openyaff.generator.ValenceCrossMirroredGenerator)):
+            COVALENT_PREFIXES.append(x.prefix)
+        elif x.prefix in ELECTROSTATIC_PREFIXES:
+            pass # ELECTROSTATIC_PREFIXES already determined
+        else:
+            DISPERSION_PREFIXES.append(x.prefix)
 
 
 class Configuration:
@@ -32,8 +48,9 @@ class Configuration:
             'ewald_alphascale',
             'ewald_gcutscale',
             ]
-    dispersion_prefixes    = ['MM3', 'LJ', 'LJCROSS']
-    electrostatic_prefixes = ['FIXQ']
+    covalent_prefixes      = COVALENT_PREFIXES
+    dispersion_prefixes    = DISPERSION_PREFIXES
+    electrostatic_prefixes = ELECTROSTATIC_PREFIXES
 
     def __init__(self, system, pars):
         """Constructor
@@ -211,6 +228,36 @@ class Configuration:
                 j += 1
             k += 1
         return list(supercell)
+
+    def get_prefixes(self, kind):
+        """Returns the prefixes belonging to a specific kind
+
+        Parameters
+        ----------
+
+        kind : str
+            kind of interactions. This is either 'covalent', 'dispersion',
+            'electrostatic', 'nonbonded', 'all'.
+
+        """
+        prefixes = []
+        if kind == 'covalent':
+            target = self.covalent_prefixes
+        elif kind == 'dispersion':
+            target = self.dispersion_prefixes
+        elif kind == 'electrostatic':
+            target = self.electrostatic_prefixes
+        elif kind == 'nonbonded':
+            target = self.dispersion_prefixes + self.electrostatic_prefixes
+        elif kind == 'all':
+            target = (self.covalent_prefixes +
+                    self.dispersion_prefixes +
+                    self.electrostatic_prefixes)
+        for prefix in self.prefixes:
+            if prefix in target:
+                prefixes.append(prefix)
+        return prefixes
+
 
     def log(self):
         """Logs information about this configuration"""

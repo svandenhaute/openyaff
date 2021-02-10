@@ -2,7 +2,9 @@ import molmod
 import numpy as np
 
 from openyaff.utils import transform_lower_triangular, is_lower_triangular, \
-        do_lattice_reduction, compute_lengths_angles, estimate_virial_stress
+        reduce_box_vectors, is_reduced, transform_symmetric, \
+        do_gram_schmidt_reduction, compute_lengths_angles, \
+        estimate_cell_derivative
 from openyaff.configuration import Configuration
 from openyaff.wrappers import YaffForceFieldWrapper
 
@@ -19,8 +21,7 @@ def test_transform_lower_triangular():
         transform_lower_triangular(pos, trial) # in-place
         # comparison with cholesky made inside transform_lower_triangular
 
-    # test fails for COBDP if reordering=True!
-    for name in ['cau13', 'mof808', 'cof5', 'ppycof']:
+    for name in ['cau13', 'uio66']: # FAILS ON COBDP; ewald_reci changes
         ff = get_system(name, return_forcefield=True) # nonrectangular system
         gpos0 = np.zeros((ff.system.natom, 3))
         energy0 = ff.compute(gpos0, None)
@@ -37,69 +38,43 @@ def test_transform_lower_triangular():
                 )
 
 
-def test_is_lower_triangular():
+def test_is_reduced():
     trial = np.array([
         [5, 0, 0],
         [2, 3, 0],
         [1, 2, 1], # c_y too large
         ])
-    assert not is_lower_triangular(trial)
+    assert not is_reduced(trial)
     trial = np.array([
         [5, 0, 0],
         [3, 3, 0], # b_x too large
         [1, 1, 1],
         ])
-    assert not is_lower_triangular(trial)
+    assert not is_reduced(trial)
     trial = np.array([
         [5, 0, 0],
         [1, 3, 0],
         [1, 1, 0], # c_x nonpositive
         ])
-    assert not is_lower_triangular(trial)
+    assert not is_reduced(trial)
 
 
 def test_lattice_reduction():
     system, pars = get_system('cobdp')
+    pos = system.pos.copy()
     rvecs = system.cell._get_rvecs().copy()
-    assert not is_lower_triangular(rvecs)
-    configuration = Configuration(system, pars)
-    seed = configuration.create_seed('full')
-    wrapper = YaffForceFieldWrapper.from_seed(seed)
-    positions = seed.system.pos.copy() / molmod.units.angstrom
-    rvecs = seed.system.cell._get_rvecs().copy() / molmod.units.angstrom
-    energy0 = wrapper.evaluate(positions, rvecs=rvecs, do_forces=False)
 
-    # compute fractional coordinates; displace all particles to primitive cell
-    frac = np.dot(positions, np.linalg.inv(rvecs))
-    frac -= np.floor(frac)
-    assert np.all(frac >= 0)
-    assert np.all(frac <= 1)
+    # use reduction algorithm from Bekker, and transform to diagonal
+    reduced = do_gram_schmidt_reduction(rvecs)
+    reduced_LT = np.linalg.cholesky(reduced @ reduced.T)
+    assert np.allclose(reduced_LT, np.diag(np.diag(reduced_LT))) # diagonal
 
-    # recreate unit cell by multiplying with old cell, and evaluate energy
-    pos_generated = np.dot(frac, rvecs)
-    energy1 = wrapper.evaluate(pos_generated, rvecs=rvecs, do_forces=False)
-    np.testing.assert_almost_equal(energy0, energy1)
+    # transform to lower triangular
+    transform_lower_triangular(pos, rvecs, reorder=True)
+    reduce_box_vectors(rvecs)
 
-    # transform to orthogonal lattice basis
-    reduced = do_lattice_reduction(rvecs)
-    delta = np.random.uniform(-1, 1, size=(3, 3))
-    np.testing.assert_almost_equal( # still primitive cell; volume unchanged
-            np.linalg.det(reduced),
-            np.linalg.det(rvecs),
-            )
-    # displace all particles into new cell
-    frac_ = np.dot(positions, np.linalg.inv(reduced))
-    frac_ -= np.floor(frac_)
-    assert np.all(frac_ >= 0)
-    assert np.all(frac_ <= 1)
-    pos_generated = np.dot(frac_, reduced) # should represent same unit cell
-
-    # transform back to original primitive cell and assert no positions changed
-    frac__ = np.dot(pos_generated, np.linalg.inv(rvecs))
-    frac__ -= np.floor(frac__)
-    assert np.all(frac__ >= 0)
-    assert np.all(frac__ <= 1)
-    np.allclose(frac, frac__)
+    # assert equality of diagonal elements from both methods
+    np.testing.assert_almost_equal(np.diag(rvecs), np.diag(reduced_LT))
 
 
 def test_compute_lengths_angles():
@@ -124,20 +99,79 @@ def test_compute_lengths_angles():
             )
 
 
+def test_transform_symmetric():
+    system, pars = get_system('cobdp')
+    pos = system.pos.copy()
+    rvecs  = system.cell._get_rvecs().copy()
+
+    # transform to symmetric form
+    transform_symmetric(pos, rvecs)
+    assert np.allclose(rvecs, rvecs.T)
+
+    # transform to triangular, and back to symmetric
+    rvecs_ = rvecs.copy()
+    pos_ = pos.copy()
+    transform_lower_triangular(pos_, rvecs_, reorder=False)
+    transform_symmetric(pos_, rvecs_)
+
+    # assert equality
+    np.testing.assert_almost_equal(rvecs_, rvecs)
+    np.testing.assert_almost_equal(pos_, pos)
+
+
 def test_estimate_virial_stress():
-    ff = get_system('uio66', return_forcefield=True)
-
     def energy_func(positions, rvecs):
-        ff.update_pos(positions * molmod.units.angstrom)
-        ff.update_rvecs(rvecs * molmod.units.angstrom)
-        return ff.compute() / molmod.units.kjmol
+        ff.update_pos(positions)
+        ff.update_rvecs(rvecs)
+        return ff.compute()
 
-    positions = ff.system.pos.copy() / molmod.units.angstrom
-    rvecs = ff.system.cell._get_rvecs().copy() / molmod.units.angstrom
-    vtens = np.zeros((3, 3))
-    ff.compute(None, vtens)
-    vtens /= (molmod.units.kjmol / molmod.units.angstrom)
+    # verify numerical pressure computation for number of benchmark systems
+    # include anisotropic systems and LJ
+    for name in ['uio66', 'cau13', 'ppycof', 'lennardjones']:
+        ff = get_system(name, return_forcefield=True)
+        positions = ff.system.pos.copy()
+        rvecs = ff.system.cell._get_rvecs().copy()
+        vtens = np.zeros((3, 3))
+        ff.compute(None, vtens)
+        unit = molmod.units.pascal * 1e6
+        pressure = np.trace(vtens) / np.linalg.det(rvecs) / unit
 
-    dUdh = estimate_virial_stress(positions, rvecs, energy_func, dh=0.1)
-    print('exact: ', vtens)
-    print('numerical: ', dUdh)
+        dUdh = estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5)
+        vtens_numerical = rvecs.T @ dUdh
+        pressure_ = np.trace(vtens_numerical) / np.linalg.det(rvecs) / unit
+        assert abs(pressure - pressure_) < 1e-3 # require at least kPa accuracy
+
+        transform_lower_triangular(positions, rvecs, reorder=True)
+        ff.update_pos(positions)
+        ff.update_rvecs(rvecs)
+        vtens = np.zeros((3, 3))
+        ff.compute(None, vtens)
+        pressure_LT = np.trace(vtens) / np.linalg.det(rvecs) / unit
+
+        dUdh = estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5,
+                use_triangular_perturbation=True)
+        vtens_numerical = rvecs.T @ dUdh
+        pressure_LT_ = np.trace(vtens_numerical) / np.linalg.det(rvecs) / unit
+
+        assert abs(pressure_LT - pressure) < 1e-8 # should be identical
+        assert abs(pressure_LT_ - pressure_) < 1e-3 # require kPa accuracy
+
+        transform_symmetric(positions, rvecs)
+        ff.update_pos(positions)
+        ff.update_rvecs(rvecs)
+        vtens = np.zeros((3, 3))
+        ff.compute(None, vtens)
+        pressure_S = np.trace(vtens) / np.linalg.det(rvecs) / unit
+
+        dUdh = estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5)
+        vtens_numerical = rvecs.T @ dUdh
+        pressure_S_ = np.trace(vtens_numerical) / np.linalg.det(rvecs) / unit
+
+        assert abs(pressure_S - pressure) < 1e-8 # should be identical
+        assert abs(pressure_S_ - pressure_) < 1e-3 # require kPa accuracy
+        # additionally, for a symmetric cell we obtain the full vtens
+        np.testing.assert_almost_equal(
+                vtens / molmod.units.kjmol,
+                vtens_numerical / molmod.units.kjmol,
+                decimal=3,
+                )

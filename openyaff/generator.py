@@ -157,6 +157,66 @@ class MM3QuarticGenerator(BondGenerator):
                 )
 
 
+class Poly4Generator(ValenceMirroredGenerator):
+    nffatype = 2
+    prefix = 'POLY4'
+    ICClass = yaff.Bond
+    VClass = yaff.Poly4
+    par_info = [('C0', float), ('C1', float), ('C2', float), ('C3', float), ('C4', float), ('R0', float)]
+
+    def iter_equiv_keys_and_pars(self, key, pars):
+        yield key, pars
+        yield key[::-1], pars
+
+    def iter_indexes(self, system):
+        return system.iter_bonds()
+
+    def get_force(self, periodic):
+        energy =  '  C0'
+        energy += '+ C1 * (r - R0)^1'
+        energy += '+ C2 * (r - R0)^2'
+        energy += '+ C3 * (r - R0)^3'
+        energy += '+ C4 * (r - R0)^4'
+        force = mm.CustomBondForce(energy)
+        force.addPerBondParameter('C0')
+        force.addPerBondParameter('C1')
+        force.addPerBondParameter('C2')
+        force.addPerBondParameter('C3')
+        force.addPerBondParameter('C4')
+        force.addPerBondParameter('R0')
+        force.setUsesPeriodicBoundaryConditions(periodic)
+        return force
+
+    def add_term_to_force(self, force, pars, indexes):
+        conversion = {
+                'C0': molmod.units.kjmol / molmod.units.angstrom ** 0,
+                'C1': molmod.units.kjmol / molmod.units.angstrom ** 1,
+                'C2': molmod.units.kjmol / molmod.units.angstrom ** 2,
+                'C3': molmod.units.kjmol / molmod.units.angstrom ** 3,
+                'C4': molmod.units.kjmol / molmod.units.angstrom ** 4,
+                'R0': molmod.units.angstrom,
+                }
+        conversion_mm = {
+                'C0': unit.kilojoule_per_mole / unit.angstrom ** 0,
+                'C1': unit.kilojoule_per_mole / unit.angstrom ** 1,
+                'C2': unit.kilojoule_per_mole / unit.angstrom ** 2,
+                'C3': unit.kilojoule_per_mole / unit.angstrom ** 3,
+                'C4': unit.kilojoule_per_mole / unit.angstrom ** 4,
+                'R0': unit.angstrom,
+                }
+        C0 = pars[0] / conversion['C0'] * conversion_mm['C0']
+        C1 = pars[1] / conversion['C1'] * conversion_mm['C1']
+        C2 = pars[2] / conversion['C2'] * conversion_mm['C2']
+        C3 = pars[3] / conversion['C3'] * conversion_mm['C3']
+        C4 = pars[4] / conversion['C4'] * conversion_mm['C4']
+        R0 = pars[5] / conversion['R0'] * conversion_mm['R0']
+        force.addBond(
+                int(indexes[0]),
+                int(indexes[1]),
+                [C0, C1, C2, C3, C4, R0],
+                )
+
+
 class BendGenerator(ValenceMirroredGenerator):
     nffatype = 3
     ICClass = None
@@ -416,6 +476,68 @@ class SquareOopDistGenerator(ValenceMirroredGenerator):
                     int(indexes[3])],
                 [K, D0],
                 )
+
+
+class OopCosGenerator(ValenceMirroredGenerator):
+    nffatype = 4
+    par_info = [('A', float)]
+    prefix = 'OOPCOS'
+    ICClass = yaff.OopCos
+    VClass = yaff.Chebychev1
+    allow_superposition = True
+
+    def iter_equiv_keys_and_pars(self, key, pars):
+        yield key, pars
+        yield (key[1], key[0], key[2], key[3]), pars
+
+    def iter_indexes(self, system):
+        #Loop over all atoms; if an atom has 3 neighbors,
+        #it is candidate for an OopCos term
+        for atom in system.neighs1.keys():
+            neighbours = list(system.neighs1[atom])
+            if len(neighbours)==3:
+                #Yield a term for all three out-of-plane angles
+                #with atom as center atom
+                yield neighbours[0],neighbours[1],neighbours[2],atom
+                yield neighbours[1],neighbours[2],neighbours[0],atom
+                yield neighbours[2],neighbours[0],neighbours[1],atom
+
+    def get_vterm(self, pars, indexes):
+        ic = yaff.OopCos(*indexes)
+        return yaff.Chebychev1(pars[0], ic)
+
+    def get_force(self, periodic):
+        cosangle = OopCosGenerator._get_cosangle()
+        energy = '0.5 * A * (1 - {})'.format(cosangle)
+        force = mm.CustomCompoundBondForce(4, energy)
+        force.addPerBondParameter('A')
+        force.setUsesPeriodicBoundaryConditions(periodic)
+        return force
+
+    @staticmethod
+    def _get_cosangle():
+        dist = 'distance(p2, p3) * sin(angle(p3, p2, p4)) * sin(dihedral(p1, p2, p4, p3))'
+        sinangle = '({}) / distance(p3, p4)'.format(dist)
+        cosangle = 'sqrt(1 - ({})^2)'.format(sinangle)
+        return cosangle
+
+    def add_term_to_force(self, force, pars, indexes):
+        conversion = {
+                'A': molmod.units.kjmol,
+                }
+        conversion_mm = {
+                'A': unit.kilojoule_per_mole,
+                }
+        A = pars[0] / conversion['A'] * conversion_mm['A']
+        force.addBond(
+                [
+                    int(indexes[0]),
+                    int(indexes[1]),
+                    int(indexes[2]),
+                    int(indexes[3])],
+                [A],
+                )
+        assert len(pars) == 1
 
 
 class TorsionGenerator(ValenceMirroredGenerator):
@@ -832,7 +954,7 @@ class MM3Generator(yaff.NonbondedGenerator):
         ff_args.parts.append(part_pair)
 
         energy = 'epsilon * (1.84 * 100000 * exp(-12 * r / sigma) - 2.25 * (sigma / r)^6)'
-        step = ' * step({} - r);'.format(ff_args.rcut / molmod.units.nanometer)
+        #step = ' * step({} - r);'.format(ff_args.rcut / molmod.units.nanometer)
         definitions = 'epsilon=sqrt(EPSILON1 * EPSILON2); sigma=SIGMA1 + SIGMA2;'
         force = mm.CustomNonbondedForce(energy + '; ' + definitions)
         force.addPerParticleParameter('SIGMA')
@@ -964,7 +1086,7 @@ class LJGenerator(yaff.NonbondedGenerator):
         ff_args.parts.append(part_pair)
 
         energy = '4.0 * epsilon * ((sigma / r)^12 - (sigma / r)^6)'
-        step = ' * step({} - r);'.format(ff_args.rcut / molmod.units.nanometer)
+        #step = ' * step({} - r);'.format(ff_args.rcut / molmod.units.nanometer)
         definitions = 'epsilon=sqrt(EPSILON1 * EPSILON2); sigma=(SIGMA1 + SIGMA2) / 2;'
         force = mm.CustomNonbondedForce(energy + '; ' + definitions)
         force.addPerParticleParameter('SIGMA')
@@ -1011,6 +1133,180 @@ class LJGenerator(yaff.NonbondedGenerator):
                     if i < j:
                         force.addExclusion(i, int(j))
         return [force]
+
+
+class LJCrossGenerator(yaff.NonbondedGenerator):
+    prefix = 'LJCROSS'
+    suffixes = ['UNIT', 'SCALE', 'PARS']
+    par_info = [('SIGMA', float), ('EPSILON', float)]
+
+    def __call__(self, system, parsec, ff_args):
+        self.check_suffixes(parsec)
+        conversions = self.process_units(parsec['UNIT'])
+        par_table = self.process_pars(parsec['PARS'], conversions, 2)
+        scale_table = self.process_scales(parsec['SCALE'])
+        forces = self.apply(par_table, scale_table, system, ff_args)
+        return forces
+
+    def iter_equiv_keys_and_pars(self, key, pars):
+        yield key, pars
+        yield key[::-1], pars
+
+    def apply(self, par_table, scale_table, system, ff_args):
+        # Prepare the atomic parameters
+        nffatypes = system.ffatype_ids.max() + 1
+        sigmas = np.ones([nffatypes, nffatypes]) # SAFE DEFAULT VALUE
+        epsilons = np.zeros([nffatypes, nffatypes])
+        for i in range(system.natom):
+            for j in range(system.natom):
+                ffa_i, ffa_j = system.ffatype_ids[i], system.ffatype_ids[j]
+                key = (system.get_ffatype(i), system.get_ffatype(j))
+                par_list = par_table.get(key, [])
+                if len(par_list) > 2:
+                    raise TypeError('Superposition should not be allowed for non-covalent terms.')
+                elif len(par_list) == 1:
+                    sigmas[ffa_i,ffa_j], epsilons[ffa_i,ffa_j] = par_list[0]
+                elif len(par_list) == 0:
+                    pass
+
+        # Prepare the global parameters
+        scalings = yaff.Scalings(system, scale_table[1], scale_table[2], scale_table[3], scale_table[4])
+
+        # Get the part. It should not exist yet.
+        part_pair = ff_args.get_part_pair(yaff.PairPotLJCross)
+        if part_pair is not None:
+            raise RuntimeError('Internal inconsistency: the LJCross part should not be present yet.')
+
+        pair_pot = yaff.PairPotLJCross(system.ffatype_ids, epsilons, sigmas, ff_args.rcut, ff_args.tr)
+        nlist = ff_args.get_nlist(system)
+        part_pair = yaff.ForcePartPair(system, nlist, scalings, pair_pot)
+        ff_args.parts.append(part_pair)
+
+        # iterate over all pairs of particles to create lists per ffatype pair
+        assert np.allclose(sigmas, sigmas.T)
+        assert np.allclose(epsilons, epsilons.T)
+
+        # create dictionary with list of atom indices per ffatype
+        atoms_per_ffatype = {}
+        for i in range(system.natom):
+            ffa = system.ffatypes[system.ffatype_ids[i]]
+            if ffa in atoms_per_ffatype.keys():
+                atoms_per_ffatype[ffa].append(i)
+            else:
+                atoms_per_ffatype[ffa] = [i]
+
+        count = 0
+        for key, value in atoms_per_ffatype.items():
+            count += len(value)
+        assert count == system.natom
+
+        # iterate over all possible ffatype pairs, and add CustomNonbondedForce
+        # per pair. Do not use per particle parameters, but specify global
+        # parameters
+        # FOR SOME REASON; USING GLOBAL PARAMETERS DOESNT WORK
+        #energy = '4.0 * epsilon * ((sigma / r)^12 - (sigma / r)^6); '
+        #energy += 'epsilon=sqrt(EPSILON1 * EPSILON2); sigma=(SIGMA1 + SIGMA2) / 2;'
+        #forces = []
+        #for i in range(nffatypes):
+        #    for j in range(i, nffatypes):
+        #        _ = [system.ffatypes[i], system.ffatypes[j]]
+        #        _.sort()
+        #        key = tuple(_)
+        #        # sigmas and epsilons arrays are symmetric, so sorting doesn't
+        #        # influence parameter assignment: sigmas[i, j] == sigmas[j, i]
+        #        sigma = sigmas[i, j] / molmod.units.nanometer * unit.nanometer
+        #        epsilon = epsilons[i, j] / molmod.units.kjmol * unit.kilojoule_per_mole
+
+        #        force = mm.CustomNonbondedForce(energy)
+        #        force.addPerParticleParameter('SIGMA')
+        #        force.addPerParticleParameter('EPSILON')
+        #        for k in range(system.natom):
+        #            force.addParticle([sigma, epsilon])
+        #        force.addInteractionGroup(
+        #                atoms_per_ffatype[key[0]],
+        #                atoms_per_ffatype[key[1]],
+        #                )
+        #        force.setCutoffDistance(ff_args.rcut / molmod.units.nanometer * unit.nanometer)
+        #        if system.cell.nvec == 3: # if system is periodic
+        #            force.setNonbondedMethod(2)
+        #        else: # system is not periodic, use CutOffNonPeriodic
+        #            force.setNonbondedMethod(1)
+
+        #        # TAIL CORRECTIONS; only make sense if system is periodic
+        #        if ff_args.tailcorrections and system.cell.nvec == 3:
+        #            force.setUseLongRangeCorrection(True)
+
+        #        # SET SWITCHING IF NEEDED
+        #        if ff_args.tr is not None:
+        #            width = ff_args.tr.width
+        #            force.setSwitchingDistance((ff_args.rcut - width) / molmod.units.nanometer * unit.nanometer)
+        #            force.setUseSwitchingFunction(True)
+        #        #assert force.getNumInteractionGroups() == 1
+        #        forces.append(force)
+
+        # FASTEST APPROACH (ON REFERENCE PLATFORM)
+        sigma = 'sigma=0.0'
+        u = molmod.units.nanometer
+        for i in range(nffatypes):
+            for j in range(i, nffatypes):
+                sigma += ' + ('
+                sigma += 'delta(FFATYPE1+FFATYPE2 - {}) * '.format(i + j)
+                sigma += 'delta(FFATYPE1*FFATYPE2 - {}) * '.format(i * j)
+                sigma += '({}))'.format(sigmas[i, j] / u)
+        sigma += '; '
+        epsilon = 'epsilon=0.0'
+        u = molmod.units.kjmol
+        for i in range(nffatypes):
+            for j in range(i, nffatypes):
+                epsilon += ' + ('
+                epsilon += 'delta(FFATYPE1+FFATYPE2 - {}) * '.format(i + j)
+                epsilon += 'delta(FFATYPE1*FFATYPE2 - {}) * '.format(i * j)
+                epsilon += '({}))'.format(epsilons[i, j] / u)
+        energy = '4.0 * epsilon * ((sigma / r)^12 - (sigma / r)^6); '
+        energy += sigma
+        energy += epsilon
+        force = mm.CustomNonbondedForce(energy)
+        force.addPerParticleParameter('FFATYPE')
+        for i in range(system.natom):
+            force.addParticle([system.ffatype_ids[i]])
+        force.setCutoffDistance(ff_args.rcut / molmod.units.nanometer * unit.nanometer)
+        if system.cell.nvec == 3: # if system is periodic
+            force.setNonbondedMethod(2)
+        else: # system is not periodic, use CutOffNonPeriodic
+            force.setNonbondedMethod(1)
+
+        # TAIL CORRECTIONS; only make sense if system is periodic
+        if ff_args.tailcorrections and system.cell.nvec == 3:
+            force.setUseLongRangeCorrection(True)
+
+        # SET SWITCHING IF NEEDED
+        if ff_args.tr is not None:
+            width = ff_args.tr.width
+            force.setSwitchingDistance((ff_args.rcut - width) / molmod.units.nanometer * unit.nanometer)
+            force.setUseSwitchingFunction(True)
+
+        # EXCLUSIONS
+        scale_index = 0
+        for key, value in scale_table.items():
+            assert(value == 0.0 or value == 1.0)
+            if value == 0.0:
+                scale_index += 1
+        for i in range(system.natom):
+            if scale_index > 0:
+                for j in system.neighs1[i]:
+                    if i < j:
+                        force.addExclusion(i, int(j))
+            if scale_index > 1:
+                for j in system.neighs2[i]:
+                    if i < j:
+                        force.addExclusion(i, int(j))
+            if scale_index > 2:
+                for j in system.neighs3[i]:
+                    if i < j:
+                        force.addExclusion(i, int(j))
+        forces = [force]
+
+        return forces
 
 
 class FixedChargeGenerator(yaff.NonbondedGenerator):
@@ -1121,6 +1417,7 @@ class FixedChargeGenerator(yaff.NonbondedGenerator):
             assert delta is not None
             force.setNonbondedMethod(4) # PME
             force.setEwaldErrorTolerance(delta)
+            force.setExceptionsUsePeriodicBoundaryConditions(True)
         else:
             force.setNonbondedMethod(0) # nonperiodic cutoff not allowed
 

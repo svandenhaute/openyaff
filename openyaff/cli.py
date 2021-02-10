@@ -36,14 +36,15 @@ def get_input_files(path_dir, filetypes):
         list of output paths, of same length as filetypes
 
     """
-    suffixes = [p.suffix for p in path_dir.iterdir()]
+    files = list(path_dir.iterdir())
+    suffixes = [file.suffix for file in files]
     path_list = []
     for filetype in filetypes:
         assert filetype in suffixes # verify correct files are present
         index = suffixes.index(filetype)
         _ = suffixes.pop(index)
         assert filetype not in suffixes # verify uniqueness
-        path_list.append(list(path_dir.iterdir())[index])
+        path_list.append(files.pop(index))
     return path_list
 
 
@@ -89,8 +90,11 @@ def initialize(cwd, save_reduced=False):
 
     # initialize Configuration based on defaults
     configuration = Configuration.from_files(*input_files)
-    supercell = configuration.determine_supercell(configuration.rcut)
-    configuration.supercell = supercell # smallest usable supercell
+    # check if rcut should be determined 
+    nonbonded_prefixes = configuration.get_prefixes('nonbonded')
+    if configuration.periodic and (len(nonbonded_prefixes) > 0):
+        supercell = configuration.determine_supercell(configuration.rcut)
+        configuration.supercell = supercell # smallest usable supercell
     configuration.log()
     logger.info('')
     logger.info('writing configuration file to')

@@ -51,10 +51,10 @@ def test_update_properties(tmp_path):
 
 
 def test_supercell():
-    system, pars = get_system('cobdp')
+    system, pars = get_system('cau13')
     configuration = Configuration(system, pars)
-    supercell = configuration.determine_supercell(10)
-    assert tuple(supercell) == (1, 3, 4)
+    supercell = configuration.determine_supercell(18)
+    assert tuple(supercell) == (3, 4, 5)
 
 
 def test_from_files():
@@ -69,7 +69,7 @@ def test_from_files():
 
 
 def test_create_seed_periodic():
-    system, pars = get_system('cobdp')
+    system, pars = get_system('cau13')
     configuration = Configuration(system, pars)
     # change parameters randomly
     configuration.supercell = [3, 1, 1]
@@ -145,3 +145,19 @@ def test_create_seed_nonperiodic():
             energy_full,
             energy_covalent + energy_nonbonded,
             )
+
+
+def test_get_prefixes():
+    system, pars = get_system('cau13')
+    configuration = Configuration(system, pars)
+
+    prefixes = configuration.get_prefixes('all')
+    covalent_prefixes = configuration.get_prefixes('covalent')
+    dispersion_prefixes = configuration.get_prefixes('dispersion')
+    electrostatic_prefixes = configuration.get_prefixes('electrostatic')
+    nonbonded_prefixes = configuration.get_prefixes('nonbonded')
+
+    _ = dispersion_prefixes + electrostatic_prefixes
+    assert tuple(sorted(_)) == tuple(sorted(nonbonded_prefixes))
+    __ = covalent_prefixes + nonbonded_prefixes
+    assert tuple(sorted(__)) == tuple(sorted(prefixes))

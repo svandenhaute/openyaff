@@ -2,12 +2,13 @@ import numpy as np
 import molmod
 
 from openyaff import YaffForceFieldWrapper
+from openyaff.utils import estimate_cell_derivative
 
 from systems import get_system
 
 
-def test_yaff_wrapper_periodic():
-    ff = get_system('cobdp', return_forcefield=True)
+def test_ff_yaff_periodic():
+    ff = get_system('cau13', return_forcefield=True)
     wrapper = YaffForceFieldWrapper(ff)
 
     pos = ff.system.pos.copy()
@@ -31,16 +32,47 @@ def test_yaff_wrapper_periodic():
     np.testing.assert_almost_equal(
             energy_ / molmod.units.kjmol,
             energy_w,
-            decimal=6, # test sometimes fail for 7
             )
     np.testing.assert_almost_equal(
             - gpos_ / molmod.units.kjmol * molmod.units.angstrom,
             force_w,
-            decimal=6, # test sometimes fail for 7
             )
 
 
-def test_yaff_wrapper_nonperiodic():
+def test_ff_yaff_stress():
+    def energy_func(positions, rvecs):
+        ff.update_pos(positions)
+        ff.update_rvecs(rvecs)
+        return ff.compute()
+
+    ff = get_system('cau13', return_forcefield=True)
+    positions = ff.system.pos.copy()
+    rvecs = ff.system.cell._get_rvecs().copy()
+    vtens = np.zeros((3, 3))
+    ff.compute(None, vtens)
+    unit = molmod.units.pascal * 1e6
+    pressure = np.trace(vtens) / np.linalg.det(rvecs) / unit
+
+    dUdh = estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5)
+    vtens_numerical = rvecs.T @ dUdh
+    pressure_ = np.trace(vtens_numerical) / np.linalg.det(rvecs) / unit
+    assert abs(pressure - pressure_) < 1e-3 # require at least kPa accuracy
+    stress_  = vtens_numerical / np.linalg.det(rvecs)
+    stress_ /= (molmod.units.kjmol / molmod.units.angstrom ** 3)
+
+    wrapper = YaffForceFieldWrapper(ff)
+    stress_w = wrapper.compute_stress(
+            positions / molmod.units.angstrom,
+            rvecs / molmod.units.angstrom,
+            )
+    np.testing.assert_almost_equal(
+            stress_w,
+            stress_,
+            decimal=5,
+            )
+
+
+def test_ff_yaff_nonperiodic():
     ff = get_system('alanine', return_forcefield=True)
     wrapper = YaffForceFieldWrapper(ff)
 
@@ -60,10 +92,8 @@ def test_yaff_wrapper_nonperiodic():
     np.testing.assert_almost_equal(
             energy_ / molmod.units.kjmol,
             energy_w,
-            decimal=6, # test sometimes fail for 7
             )
     np.testing.assert_almost_equal(
             - gpos_ / molmod.units.kjmol * molmod.units.angstrom,
             force_w,
-            decimal=6, # test sometimes fail for 7
             )

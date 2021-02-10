@@ -3,7 +3,7 @@ import numpy as np
 import simtk.unit as unit
 import simtk.openmm as mm
 
-from openyaff.utils import yaff_generate
+from openyaff.utils import yaff_generate, estimate_cell_derivative
 
 
 class ForceFieldWrapper:
@@ -74,9 +74,26 @@ class ForceFieldWrapper:
             else:
                 return energy
 
-    def compute_stress(self, positions, rvecs):
+    def compute_stress(self, positions, rvecs, dh=1e-6):
         """Computes the virial stress using a finite difference scheme"""
-        pass
+        def energy_func(pos, cell):
+            return self._internal_evaluate(pos, cell, do_forces=False)
+
+        # use triangular perturbations if cell is lower triangular
+        if (rvecs[0, 1] == 0.0 and
+            rvecs[0, 2] == 0.0 and
+            rvecs[1, 2] == 0.0):
+            use_triangular_perturbation = True
+        else:
+            use_triangular_perturbation = False
+        dUdh = estimate_cell_derivative(
+                positions,
+                rvecs,
+                energy_func,
+                dh=dh,
+                use_triangular_perturbation=use_triangular_perturbation,
+                )
+        return (rvecs.T @ dUdh) / np.linalg.det(rvecs)
 
     def _internal_evaluate(self, positions, rvecs, do_forces):
         raise NotImplementedError
