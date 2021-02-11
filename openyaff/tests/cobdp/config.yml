@@ -1,7 +1,0 @@
-yaff:
-  rcut: 10.0
-  supercell: [1, 1, 1]
-  switch_width: 4.0
-  tailcorrections: false
-  ewald_alphascale: 3.5
-  ewald_gcutscale: 1.1

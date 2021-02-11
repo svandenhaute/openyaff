@@ -65,18 +65,8 @@ def lennardjones(natoms=40, volume=1000):
     return system, pars
 
 
-def cobdp(return_forcefield=False):
-    """Generate CoBDP system from YAFF input files"""
-    path_system = str(here / 'cobdp' / 'system.chk')
-    path_pars = str(here / 'cobdp' / 'pars.txt')
-    system = yaff.System.from_file(path_system)
-    with open(path_pars, 'r') as f:
-        pars = f.read()
-    return system, pars
-
-
 def mil53(return_forcefield=False):
-    """Generate CoBDP system from YAFF input files"""
+    """Generate MIL53 system from YAFF input files"""
     path_system = str(here / 'mil53' / 'system.chk')
     path_pars = str(here / 'mil53' / 'pars.txt')
     system = yaff.System.from_file(path_system)
@@ -86,7 +76,7 @@ def mil53(return_forcefield=False):
 
 
 def cof5(return_forcefield=False):
-    """Generate CoBDP system from YAFF input files"""
+    """Generate COF5 system from YAFF input files"""
     path_system = str(here / 'cof5' / 'system.chk')
     path_pars = str(here / 'cof5' / 'pars.txt')
     system = yaff.System.from_file(path_system)
@@ -96,7 +86,7 @@ def cof5(return_forcefield=False):
 
 
 def cau13(return_forcefield=False):
-    """Generate CoBDP system from YAFF input files"""
+    """Generate CAU13 system from YAFF input files"""
     path_system = str(here / 'cau13' / 'system.chk')
     path_pars = str(here / 'cau13' / 'pars.txt')
     system = yaff.System.from_file(path_system)
@@ -106,7 +96,7 @@ def cau13(return_forcefield=False):
 
 
 def mof808(return_forcefield=False):
-    """Generate CoBDP system from YAFF input files"""
+    """Generate MOF808 system from YAFF input files"""
     path_system = str(here / 'mof808' / 'system.chk')
     path_pars = str(here / 'mof808' / 'pars.txt')
     system = yaff.System.from_file(path_system)
@@ -116,7 +106,7 @@ def mof808(return_forcefield=False):
 
 
 def ppycof(return_forcefield=False):
-    """Generate CoBDP system from YAFF input files"""
+    """Generate PPYCOF system from YAFF input files"""
     path_system = str(here / 'ppycof' / 'system.chk')
     path_pars = str(here / 'ppycof' / 'pars.txt')
     system = yaff.System.from_file(path_system)
@@ -126,7 +116,17 @@ def ppycof(return_forcefield=False):
 
 
 def uio66(return_forcefield=False):
-    """Generate CoBDP system from YAFF input files"""
+    """Generate UIO66 system from YAFF input files"""
+    path_system = str(here / 'uio66' / 'system.chk')
+    path_pars = str(here / 'uio66' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    with open(path_pars, 'r') as f:
+        pars = f.read()
+    return system, pars
+
+
+def mof5(return_forcefield=False):
+    """Generate MOF5 system from YAFF input files"""
     path_system = str(here / 'uio66' / 'system.chk')
     path_pars = str(here / 'uio66' / 'pars.txt')
     system = yaff.System.from_file(path_system)
@@ -147,12 +147,12 @@ def alanine(return_forcefield=False):
 def get_system(name, return_forcefield=False, **kwargs):
     if name == 'lennardjones':
         system, pars = lennardjones(**kwargs)
-    elif name == 'cobdp':
-        system, pars = cobdp(**kwargs)
     elif name == 'mil53':
         system, pars = mil53(**kwargs)
     elif name == 'cof5':
         system, pars = cof5(**kwargs)
+    elif name == 'mof5':
+        system, pars = mof5(**kwargs)
     elif name == 'cau13':
         system, pars = cau13(**kwargs)
     elif name == 'mof808':
@@ -160,7 +160,7 @@ def get_system(name, return_forcefield=False, **kwargs):
     elif name == 'ppycof':
         system, pars = ppycof(**kwargs)
     elif name == 'uio66':
-        system, pars = ppycof(**kwargs)
+        system, pars = uio66(**kwargs)
     elif name == 'alanine':
         system, pars = alanine(**kwargs)
     else:

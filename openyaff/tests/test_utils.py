@@ -60,7 +60,7 @@ def test_is_reduced():
 
 
 def test_lattice_reduction():
-    system, pars = get_system('cobdp')
+    system, pars = get_system('cau13')
     pos = system.pos.copy()
     rvecs = system.cell._get_rvecs().copy()
 
@@ -100,7 +100,7 @@ def test_compute_lengths_angles():
 
 
 def test_transform_symmetric():
-    system, pars = get_system('cobdp')
+    system, pars = get_system('mil53')
     pos = system.pos.copy()
     rvecs  = system.cell._get_rvecs().copy()
 

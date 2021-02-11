@@ -110,6 +110,8 @@ def transform_symmetric(pos, rvecs):
 def determine_rcut(rvecs):
     """Determines the maximum allowed cutoff radius of rvecs
 
+    The maximum cutoff radius should be determined based on the reduced cell
+
     Parameters
     ----------
 
@@ -117,14 +119,14 @@ def determine_rcut(rvecs):
         (3, 3) array with box vectors as rows
 
     """
-    if not is_reduced(rvecs):
-        raise ValueError('Box vectors are not in reduced form')
-    else:
-        return min([
-                rvecs[0, 0],
-                rvecs[1, 1],
-                rvecs[2, 2],
-                ]) / 2
+    rvecs_ = rvecs.copy()
+    if not is_reduced(rvecs_):
+        reduce_box_vectors(rvecs_)
+    return min([
+            rvecs_[0, 0],
+            rvecs_[1, 1],
+            rvecs_[2, 2],
+            ]) / 2
 
 
 def reduce_box_vectors(rvecs):
@@ -368,3 +370,51 @@ def estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5,
                         )
                 dUdh[i, j] = (E_pluss - E_minus) / dh
     return dUdh
+
+
+class Colors:
+   PURPLE = '\033[95m'
+   CYAN = '\033[96m'
+   DARKCYAN = '\033[36m'
+   BLUE = '\033[94m'
+   GREEN = '\033[92m'
+   YELLOW = '\033[93m'
+   RED = '\033[91m'
+   BOLD = '\033[1m'
+   UNDERLINE = '\033[4m'
+   END = '\033[0m'
+
+
+def log_header(name, logger, width=90, spacing=6):
+    """Creates larger header with given title
+
+    Parameters
+    ----------
+
+    name : str
+        name to be displayed in the header
+
+    logger : logging.Logger
+        logger instance to be used
+
+    width : int
+        total width of the header, in number of characters
+
+    spacing : int
+        spacing around the title, in number of spaces
+
+    """
+    msg = str(name)
+    msg += ' ' * (len(msg) % 2)
+    leftright = (width - len(msg) - 2 * spacing) // 2
+
+    first = '$' * width
+    second = '$'*leftright + ' ' * (2 * spacing + len(msg)) + '$'*leftright
+    third = '$'*leftright + ' '*spacing + msg + ' '*spacing + '$'*leftright
+    fourth = second
+    fifth = first
+    logger.info(Colors.BOLD + first + Colors.END)
+    logger.info(Colors.BOLD + second + Colors.END)
+    logger.info(Colors.BOLD + third + Colors.END)
+    logger.info(Colors.BOLD + fourth + Colors.END)
+    logger.info(Colors.BOLD + fifth + Colors.END)

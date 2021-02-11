@@ -9,7 +9,7 @@ from systems import get_system, here
 def test_initialize_periodic(tmp_path):
     system, pars = get_system('lennardjones')
     configuration = Configuration(system, pars)
-    configuration.log()
+    configuration.log_system()
 
     # write defaults
     path_config = tmp_path / 'config.yml'
@@ -30,7 +30,7 @@ def test_initialize_periodic(tmp_path):
 def test_initialize_nonperiodic(tmp_path):
     system, pars = get_system('alanine')
     configuration = Configuration(system, pars)
-    configuration.log()
+    configuration.log_system()
 
     # write defaults
     path_config = tmp_path / 'config.yml'
@@ -41,7 +41,7 @@ def test_initialize_nonperiodic(tmp_path):
 
 
 def test_update_properties(tmp_path):
-    system, pars = get_system('cobdp')
+    system, pars = get_system('mil53')
     configuration = Configuration(system, pars)
 
     config = configuration.write()
@@ -57,10 +57,18 @@ def test_supercell():
     assert tuple(supercell) == (3, 4, 5)
 
 
-def test_from_files():
-    path_system = here / 'cobdp' / 'system.chk'
-    path_pars   = here / 'cobdp' / 'pars.txt'
-    path_config = here / 'cobdp' / 'config.yml'
+def test_from_files(tmp_path):
+    system, pars = get_system('mil53')
+    configuration = Configuration(system, pars)
+
+    configuration.write(tmp_path / 'config.yml')
+    system.to_file(str(tmp_path / 'system.chk'))
+    with open(tmp_path / 'pars.txt', 'w+') as f:
+        f.write(pars)
+
+    path_system = tmp_path / 'system.chk'
+    path_pars   = tmp_path / 'pars.txt'
+    path_config = tmp_path / 'config.yml'
     configuration = Configuration.from_files(
             path_system,
             path_pars,

@@ -1,10 +1,14 @@
 import yaml
+import logging
 import numpy as np
 import simtk.openmm as mm
 
 from openyaff.utils import create_openmm_system
 from openyaff.generator import AVAILABLE_PREFIXES, apply_generators_mm
 from openyaff.seeds import OpenMMSeed
+
+
+logger = logging.getLogger(__name__)
 
 
 class Conversion:
@@ -159,6 +163,7 @@ class ExplicitConversion(Conversion):
         # raise AssertionError if not compatible
         self.check_compatibility(configuration)
         yaff_seed = configuration.create_seed(kind=seed_kind)
+        logger.debug('creating OpenMM System object')
         system_mm = create_openmm_system(yaff_seed.system)
         dummy = mm.HarmonicBondForce()
         dummy.setUsesPeriodicBoundaryConditions(configuration.periodic)

@@ -1,8 +1,12 @@
 import yaff
+import logging
 import numpy as np
 import molmod
 import simtk.unit as unit
 import simtk.openmm as mm
+
+
+logger = logging.getLogger(__name__) # logging per module
 
 
 class ValenceMirroredGenerator(yaff.ValenceGenerator):
@@ -953,7 +957,7 @@ class MM3Generator(yaff.NonbondedGenerator):
         part_pair = yaff.ForcePartPair(system, nlist, scalings, pair_pot)
         ff_args.parts.append(part_pair)
 
-        energy = 'epsilon * (1.84 * 100000 * exp(-12 * r / sigma) - 2.25 * (sigma / r)^6)'
+        energy = 'epsilon * (1.84 * 100000.0 * exp(-12.0 * r / sigma) - 2.25 * (sigma / r)^6)'
         #step = ' * step({} - r);'.format(ff_args.rcut / molmod.units.nanometer)
         definitions = 'epsilon=sqrt(EPSILON1 * EPSILON2); sigma=SIGMA1 + SIGMA2;'
         force = mm.CustomNonbondedForce(energy + '; ' + definitions)
@@ -1562,6 +1566,7 @@ def apply_generators_mm(yaff_seed, system_mm, **kwargs):
     # corresponding generator.
     total_forces = []
     for prefix, section in parameters.sections.items():
+        logger.debug('applying prefix {}'.format(prefix))
         generator = generators.get(prefix)
         if generator is None:
             raise NotImplementedError('No implementation for prefix {}'.format(

@@ -136,14 +136,14 @@ MM3:SCALE 3 1.0
 # ---------------------------------------------
 # KEY      ffatype    SIGMA  EPSILON  ONLYPAULI
 # ---------------------------------------------
-MM3:PARS    H_B_BR_O    1.620    0.020    0       #
-MM3:PARS    H_O_BR_O    1.620    0.020    0       #
-MM3:PARS           O    1.820    0.059    0       #
-MM3:PARS           B    2.150    0.014    0       #
-MM3:PARS    C_B_BR_O    1.960    0.056    0       #
-MM3:PARS         C_O    1.960    0.056    0       #
-MM3:PARS         C_B    1.960    0.056    0       #
-MM3:PARS    C_O_BR_O    1.960    0.056    0       #
-MM3:PARS      C_HHTP    1.960    0.056    0       #
+MM3:PARS    H_B_BR_O    1.620    0.020    0
+MM3:PARS    H_O_BR_O    1.620    0.020    0
+MM3:PARS           O    1.820    0.059    0
+MM3:PARS           B    2.150    0.014    0
+MM3:PARS    C_B_BR_O    1.960    0.056    0
+MM3:PARS         C_O    1.960    0.056    0
+MM3:PARS         C_B    1.960    0.056    0
+MM3:PARS    C_O_BR_O    1.960    0.056    0
+MM3:PARS      C_HHTP    1.960    0.056    0
 
 

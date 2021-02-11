@@ -4,15 +4,15 @@ import yaff
 
 from pathlib import Path
 
-from openyaff.utils import add_header_to_config
+from openyaff.utils import add_header_to_config, determine_rcut, \
+        save_openmm_system
 from openyaff import Configuration, load_conversion, load_validations, \
         ExplicitConversion, SinglePointValidation
 
 
 yaff.log.set_level(yaff.log.silent)
 
-# enable logging
-logging.basicConfig(level=logging.INFO, format='%(name)s - %(message)s')
+
 logger = logging.getLogger(__name__) # logging per module
 
 
@@ -56,6 +56,7 @@ def validate(cwd):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
     configuration = Configuration.from_files(*input_files, path_yml)
+    # TODO: check rcut setting
     conversion = load_conversion(path_yml)
     validations = load_validations(path_yml)
     for validation in validations:
@@ -66,9 +67,13 @@ def convert(cwd, seed_kind):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
     configuration = Configuration.from_files(*input_files, path_yml)
+    configuration.log_config()
     conversion = load_conversion(path_yml)
     openmm_seed = conversion.apply(configuration, seed_kind)
-    save_openmm_system(openmm_seed.system_mm, cwd / 'system.xml')
+    path_xml = cwd / 'system.xml'
+    logger.info('saving OpenMM System object to ')
+    logger.info(path_xml)
+    save_openmm_system(openmm_seed.system_mm, path_xml)
 
 
 def initialize(cwd, save_reduced=False):
@@ -95,7 +100,8 @@ def initialize(cwd, save_reduced=False):
     if configuration.periodic and (len(nonbonded_prefixes) > 0):
         supercell = configuration.determine_supercell(configuration.rcut)
         configuration.supercell = supercell # smallest usable supercell
-    configuration.log()
+    configuration.log_system()
+    configuration.log_config()
     logger.info('')
     logger.info('writing configuration file to')
     logger.info(str(path_yml))
@@ -150,7 +156,21 @@ def main():
             action='store_true',
             default=False,
             )
+    parser.add_argument(
+            '-d',
+            '--debug',
+            action='store_true',
+            default=False,
+            help='enables debug mode',
+            )
     args = parser.parse_args()
+
+    # enable logging
+    logging_format = '%(name)s - %(message)s'
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG, format=logging_format)
+    else:
+        logging.basicConfig(level=logging.INFO, format=logging_format)
 
     cwd = Path.cwd()
     if args.mode == 'test':

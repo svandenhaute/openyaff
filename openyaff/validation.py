@@ -5,6 +5,7 @@ import numpy as np
 from molmod.units import angstrom
 
 from openyaff.wrappers import YaffForceFieldWrapper, OpenMMForceFieldWrapper
+from openyaff.utils import log_header, reduce_box_vectors
 
 
 logger = logging.getLogger(__name__) # logging per module
@@ -98,16 +99,15 @@ class Validation:
 
     def log(self):
         """Logs information prior to running the validation"""
-        n = 40
-        logger.info('=' * n + '  ' + self.name + '  ' + '=' * n)
+        log_header(
+                self.name + ' validation',
+                logger,
+                )
         logger.info('')
         logger.info('')
         logger.info('validating the following OpenMM platforms:')
         for platform in self.platforms:
             logger.info('\t\t' + platform)
-        #if self.separate_parts:
-        #    logger.info('covalent, dispersion and electrostatic contributions'
-        #            ' are treated separately')
 
     def _internal_validate(self, wrapper_yaff, wrapper_mm):
         """Performs validation and returns a dictionary with results
@@ -206,16 +206,6 @@ class SinglePointValidation(Validation):
             'disp_ampl',
             'box_ampl',
             ]
-    energy_tol = {
-            'covalent'      : [1e-5, 1e-5, 1e-5, 1e-5],
-            'dispersion'    : [1e-5, 1e-5, 1e-5, 1e-5],
-            'electrostatic' : [1e-3, 1e-3, 1e-3, 1e-3],
-            }
-    forces_tol = {
-            'covalent'      : [1e-5, 1e-5, 1e-5, 1e-5],
-            'dispersion'    : [1e-5, 1e-5, 1e-5, 1e-5],
-            'electrostatic' : [1e-3, 1e-3, 1e-3, 1e-3],
-            }
 
     def __init__(self, nstates=10, disp_ampl=0.5, box_ampl=1.0, **kwargs):
         """Constructor
@@ -245,20 +235,6 @@ class SinglePointValidation(Validation):
 
     def _internal_validate(self, configuration, conversion, platform, kind):
         """Performs single point validations"""
-        # get tolerances
-        error_index_dict = {
-                'Reference': 0,
-                'CPU': 1,
-                'CUDA': 2,
-                'OpenCL': 3,
-                }
-        # use electrostatic error tolerance if seed contains electrostatics
-        if (kind == 'all') or (kind == 'nonbonded'):
-            error_kind = 'electrostatic'
-        else:
-            error_kind = kind
-        energy_tol_ = self.energy_tol[error_kind][error_index_dict[platform]]
-        forces_tol_ = self.forces_tol[error_kind][error_index_dict[platform]]
 
         # perform conversion, initialize arrays and wrappers
         seed_yaff = configuration.create_seed(kind)
@@ -281,20 +257,21 @@ class SinglePointValidation(Validation):
                 delta[0, 1] = 0
                 delta[0, 2] = 0
                 delta[1, 2] = 0
-                state += (rvecs + delta,)
+                drvecs = rvecs + delta
+                reduce_box_vectors(drvecs) # possibly no longer reduced
+                state += (drvecs,)
             states.append(state)
         logger.info('')
-        logger.info('-' * 80)
         logger.info('\t\tPLATFORM: {} \t\t INTERACTION: {}'.format(platform, kind))
+        logger.info('-' * 90)
         prefixes = configuration.get_prefixes(kind)
         if len(prefixes) > 0: # ignore empty parts
-            logger.info('')
             nspaces = 10
             header = '     YAFF [kJ/mol]'
             header += nspaces * ' '
             header += '  OpenMM [kJ/mol]'
             header += nspaces * ' '
-            header += 'relative error [max: {:10.4e}]'.format(energy_tol_)
+            header += 'relative error'
             logger.info(header)
 
             for i, state in enumerate(states):
@@ -330,11 +307,11 @@ class SinglePointValidation(Validation):
             line += nspaces * ' '
             line += 'max={:.1e}'.format(np.max(error) / norm)
             logger.info(line)
+            logger.info('-' * 90)
+            logger.info('')
             logger.info('')
         else:
-            logger.info('')
             logger.info('\tno {} interactions present'.format(kind))
-            logger.info('')
 
     @staticmethod
     def annotate(path_yml):
@@ -376,7 +353,7 @@ class SinglePointValidation(Validation):
 
     def log(self):
         Validation.log(self)
-        logger.info('using single point calculations over {} '
+        logger.info('based on single point calculations over {} '
                 'random states:'.format(self.nstates))
         logger.info('\t\tparticle displacement amplitude: {} angstrom'.format(
                 self.disp_ampl))

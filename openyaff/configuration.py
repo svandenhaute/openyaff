@@ -7,7 +7,8 @@ import numpy as np
 from datetime import datetime
 
 from openyaff.utils import determine_rcut, transform_lower_triangular, \
-        compute_lengths_angles, is_lower_triangular
+        compute_lengths_angles, is_lower_triangular, is_reduced, \
+        reduce_box_vectors, log_header
 from openyaff.seeds import YaffSeed
 import openyaff.generator
 
@@ -69,6 +70,8 @@ class Configuration:
         if self.periodic:
             rvecs = system.cell._get_rvecs().copy()
             transform_lower_triangular(system.pos, rvecs, reorder=True)
+            reduce_box_vectors(rvecs)
+            assert is_reduced(rvecs)
             system.cell.update_rvecs(rvecs)
         self.system = system
 
@@ -132,7 +135,7 @@ class Configuration:
             for key in (self.dispersion_prefixes + self.electrostatic_prefixes):
                 parameters.sections.pop(key, None) # returns None if not present
         elif kind == 'nonbonded':
-            # retain only dispersion and electrostatic prefixes
+            # retain only dispersion and electrostatic
             sections = {}
             for key in (self.dispersion_prefixes + self.electrostatic_prefixes):
                 section = parameters.sections.get(key, None)
@@ -148,7 +151,7 @@ class Configuration:
                     sections[key] = section
             parameters = yaff.Parameters(sections)
         elif kind == 'electrostatic':
-            # retain only dispersion
+            # retain only electrostatic
             sections = {}
             for key in self.electrostatic_prefixes:
                 section = parameters.sections.get(key, None)
@@ -161,8 +164,12 @@ class Configuration:
         # construct FFArgs instance and set properties
         ff_args = yaff.FFArgs()
         if self.periodic and tuple(self.supercell) != (1, 1, 1):
-            # system already in reduced form
+            # generate supercell based on reduced rvecs, and apply reduction
+            # again if necessary
             system = self.system.supercell(*self.supercell)
+            rvecs = system.cell._get_rvecs().copy()
+            reduce_box_vectors(rvecs)
+            system.cell.update_rvecs(rvecs)
         else:
             system = self.system
 
@@ -194,6 +201,8 @@ class Configuration:
         the cutoff range of the nonbonded interactions) is determined by the
         cell geometry. This function inspects the unit cell and supercells
         of the system to compute the maximum allowed rcut for each option.
+        The supercell tuple is constructed based on the *reduced form* of the
+        initial cell as stored in the system .chk.
 
         Parameters
         ----------
@@ -205,6 +214,7 @@ class Configuration:
         rcut *= molmod.units.angstrom
         rvecs = self.system.cell._get_rvecs()
         assert is_lower_triangular(rvecs)
+        assert is_reduced(rvecs)
         current_rcut = 0
         i, j, k = (1, 1, 1)
         while (k < 20) and (current_rcut < rcut): # c vector is last
@@ -258,9 +268,38 @@ class Configuration:
                 prefixes.append(prefix)
         return prefixes
 
+    def log_config(self):
+        """Logs information about the current configuration"""
+        log_header('force field configuration', logger)
+        logger.info('')
+        logger.info('')
+        if self.periodic:
+            natom     = np.prod(np.array(self.supercell)) * self.system.natom
+        else:
+            natom = system.natom
+        config = {}
+        for name in self.properties:
+            value = getattr(self, name)
+            if value is not None: # if property is applicable
+                config[name] = value
+        config['number of atoms'] = natom
+        min_length = max([len(key) for key, _ in config.items()])
+        spacing = 3
+        for key, value in config.items():
+            line = key
+            line += ' ' * (min_length - len(key) + spacing)
+            line += ':'
+            line += ' ' * spacing
+            line += '{}'.format(value)
+            logger.info(line)
+        logger.info('')
+        logger.info('')
 
-    def log(self):
-        """Logs information about this configuration"""
+    def log_system(self):
+        """Logs information about this system"""
+        log_header('system information', logger)
+        logger.info('')
+        logger.info('')
         natom = self.system.natom
         if self.periodic:
             system_type = 'periodic'
@@ -295,6 +334,8 @@ class Configuration:
         logger.info('found {} prefixes:'.format(len(self.prefixes)))
         for prefix in self.prefixes:
             logger.info('\t' + prefix)
+        logger.info('')
+        logger.info('')
 
     def write(self, path_config=None):
         """Generates the .yml contents and optionally saves it to a file

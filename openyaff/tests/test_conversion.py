@@ -4,257 +4,123 @@ import numpy as np
 
 from openyaff import Configuration, ExplicitConversion, \
         OpenMMForceFieldWrapper, YaffForceFieldWrapper
+from openyaff.utils import reduce_box_vectors
 
 from systems import get_system
+from conftest import assert_tol
 
 
-def test_simple_covalent_nonperiodic():
-    system, pars = get_system('alanine')
-    configuration = Configuration(system, pars)
-    conversion = ExplicitConversion()
-    seed_kind = 'covalent'
-    seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
-    seed_yaff = configuration.create_seed(kind=seed_kind)
+def test_periodic():
+    systems    = ['mof808', 'uio66', 'cau13', 'mil53', 'ppycof', 'cof5', 'mof5']
+    platforms  = ['Reference']
+    seed_kinds = ['covalent', 'dispersion', 'electrostatic']
 
-    wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
-    wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
-    assert not wrapper_yaff.periodic # system should not be considered periodic
-    assert not wrapper_mm.periodic # system should not be considered periodic
+    # systematic constant offset in dispersion energy for COFs, unclear why
 
-    pos = system.pos.copy()
-    for i in range(100):
-        pos += np.random.uniform(-1, 1, size=pos.shape) * 2
-        energy_mm, forces_mm = wrapper_mm.evaluate(pos / molmod.units.angstrom)
+    tolerance = {
+            ('Reference', 'covalent'): 1e-6, # some MM3 terms have error 1e-7
+            ('Reference', 'dispersion'): 5e-3,
+            ('Reference', 'electrostatic'): 1e-3,
+            #('CUDA', 'covalent'): 1e-3,
+            #('CUDA', 'dispersion'): 1e-3,
+            #('CUDA', 'electrostatic'): 1e-3,
+            }
 
-        energy, forces = wrapper_yaff.evaluate(pos / molmod.units.angstrom)
-        np.testing.assert_almost_equal(
-                energy_mm,
-                energy,
-                )
-        np.testing.assert_almost_equal(
-                forces_mm,
-                forces,
-                )
+    nstates   = 5
+    disp_ampl = 0.5
+    box_ampl  = 0.5
 
-
-def test_simple_covalent_periodic():
-    system, pars = get_system('cobdp')
-    configuration = Configuration(system, pars)
-    # this test fails for small unit cells
-    configuration.supercell = [2, 2, 2]
-    conversion = ExplicitConversion()
-    seed_kind = 'covalent'
-    seed_yaff = configuration.create_seed(kind=seed_kind)
-    seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
-
-    wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
-    wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
-    assert wrapper_yaff.periodic
-    assert wrapper_mm.periodic
-
-    system = seed_yaff.system
-    pos = system.pos.copy()
-    rvecs = system.cell._get_rvecs().copy()
-    for i in range(20):
-        dpos = np.random.uniform(-1.0, 1.0, size=pos.shape) * 2.0
-        drvecs = np.random.uniform(-0.1, 0.1, size=rvecs.shape) * 3
-        drvecs[0, 1] = 0.0
-        drvecs[0, 2] = 0.0
-        drvecs[1, 2] = 0.0
-        energy_mm, forces_mm = wrapper_mm.evaluate(
-                (pos + dpos) / molmod.units.angstrom,
-                (rvecs + drvecs) / molmod.units.angstrom,
-                )
-
-        energy, forces = wrapper_yaff.evaluate(
-                (pos + dpos) / molmod.units.angstrom,
-                (rvecs + drvecs) / molmod.units.angstrom,
-                )
-        #delta = np.linalg.norm(forces - forces_mm, axis=1)
-        #for i in range(forces.shape[0]):
-        #    if delta[i] > 1e-7:
-        #        print(i, system.ffatypes[system.ffatype_ids[i]])
-        #        print(forces[i], forces_mm[i])
-        np.testing.assert_almost_equal(
-                energy_mm,
-                energy,
-                decimal=6,
-                )
-        np.testing.assert_almost_equal(
-                forces_mm,
-                forces,
-                decimal=6,
-                )
+    for name in systems:
+        for platform in platforms:
+            for kind in seed_kinds:
+                system, pars = get_system(name)
+                configuration = Configuration(system, pars)
+                tol = tolerance[(platform, kind)]
 
 
-def test_simple_dispersion_nonperiodic():
-    system, pars = get_system('alanine')
-    configuration = Configuration(system, pars)
-    # YAFF and OpenMM use a different switching function. If it is disabled,
-    # the results between both are identical up to 6 decimals
-    conversion = ExplicitConversion()
-    seed_kind = 'dispersion'
-    seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
-    seed_yaff = configuration.create_seed(kind=seed_kind)
+                # YAFF and OpenMM use a different switching function. If it is disabled,
+                # the results between both are identical up to 6 decimals
+                configuration.switch_width = 0.0 # disable switching
+                rcut = 10.0
+                configuration.rcut = rcut # request cutoff of 10 angstorm
+                supercell = configuration.determine_supercell(rcut)
+                configuration.supercell = list(supercell) # set required supercell
+                conversion = ExplicitConversion(pme_error_thres=1e-5)
+                seed_mm = conversion.apply(configuration, seed_kind=kind)
+                seed_yaff = configuration.create_seed(kind=kind)
 
-    wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
-    wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
-    assert not wrapper_yaff.periodic # system should not be considered periodic
-    assert not wrapper_mm.periodic # system should not be considered periodic
+                wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, platform)
+                wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
+                assert wrapper_yaff.periodic # system should not be considered periodic
+                assert wrapper_mm.periodic # system should not be considered periodic
 
-    pos = system.pos.copy()
-    for i in range(30):
-        dpos = np.random.uniform(-1.0, 1.0, size=pos.shape)
-        energy_mm, forces_mm = wrapper_mm.evaluate(
-                (pos + dpos) / molmod.units.angstrom,
-                )
-
-        energy, forces = wrapper_yaff.evaluate(
-                (pos + dpos) / molmod.units.angstrom,
-                )
-        np.testing.assert_almost_equal(
-                energy_mm,
-                energy,
-                decimal=6,
-                )
-        np.testing.assert_almost_equal(
-                forces_mm,
-                forces,
-                decimal=6,
-                )
-
-
-def test_simple_dispersion_periodic():
-    system, pars = get_system('cobdp')
-    configuration = Configuration(system, pars)
-    # YAFF and OpenMM use a different switching function. If it is disabled,
-    # the results between both are identical up to 6 decimals
-    configuration.switch_width = 0.0 # disable switching
-    rcut = 11.0
-    configuration.rcut = rcut # request cutoff of 10 angstorm
-    supercell = configuration.determine_supercell(rcut)
-    configuration.supercell = list(supercell) # set required supercell
-    conversion = ExplicitConversion()
-    seed_kind = 'dispersion'
-    seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
-    seed_yaff = configuration.create_seed(kind=seed_kind)
-
-    wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
-    wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
-    assert wrapper_yaff.periodic # system should not be considered periodic
-    assert wrapper_mm.periodic # system should not be considered periodic
-
-    pos = seed_yaff.system.pos.copy()
-    rvecs = seed_yaff.system.cell._get_rvecs().copy()
-    for i in range(10):
-        dpos = np.random.uniform(-1.0, 1.0, size=pos.shape)
-        drvecs = np.random.uniform(-0.5, 0.5, size=rvecs.shape)
-        drvecs[0, 1] = 0
-        drvecs[0, 2] = 0
-        drvecs[1, 2] = 0
-        energy_mm, forces_mm = wrapper_mm.evaluate(
-                (pos + dpos) / molmod.units.angstrom,
-                rvecs=(rvecs + drvecs) / molmod.units.angstrom,
-                )
-        energy, forces = wrapper_yaff.evaluate(
-                (pos + dpos) / molmod.units.angstrom,
-                rvecs=(rvecs + drvecs) / molmod.units.angstrom,
-                )
-        np.testing.assert_almost_equal(
-                energy_mm,
-                energy,
-                decimal=5,
-                )
-        np.testing.assert_almost_equal(
-                forces_mm,
-                forces,
-                decimal=5,
-                )
+                pos = seed_yaff.system.pos.copy()
+                rvecs = seed_yaff.system.cell._get_rvecs().copy()
+                for i in range(nstates):
+                    dpos = np.random.uniform(-disp_ampl, disp_ampl, size=pos.shape)
+                    drvecs = np.random.uniform(-box_ampl, box_ampl, size=rvecs.shape)
+                    drvecs[0, 1] = 0
+                    drvecs[0, 2] = 0
+                    drvecs[1, 2] = 0
+                    tmp = rvecs + drvecs
+                    reduce_box_vectors(tmp)
+                    energy_mm, forces_mm = wrapper_mm.evaluate(
+                            (pos + dpos) / molmod.units.angstrom,
+                            rvecs=tmp / molmod.units.angstrom,
+                            )
+                    energy, forces = wrapper_yaff.evaluate(
+                            (pos + dpos) / molmod.units.angstrom,
+                            rvecs=tmp / molmod.units.angstrom,
+                            )
+                    assert_tol(energy, energy_mm, tol)
+                    assert_tol(forces, forces_mm, 10 * tol)
 
 
-def test_simple_electrostatic_nonperiodic():
-    system, pars = get_system('alanine')
-    configuration = Configuration(system, pars)
-    # YAFF and OpenMM use a different switching function. If it is disabled,
-    # the results between both are identical up to 6 decimals
-    conversion = ExplicitConversion()
-    seed_kind = 'electrostatic'
-    seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
-    seed_yaff = configuration.create_seed(kind=seed_kind)
+def test_nonperiodic():
+    systems    = ['alanine']
+    platforms  = ['Reference']
+    seed_kinds = ['covalent', 'dispersion', 'electrostatic']
 
-    wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
-    wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
-    assert not wrapper_yaff.periodic # system should not be considered periodic
-    assert not wrapper_mm.periodic # system should not be considered periodic
+    tolerance = {
+            ('Reference', 'covalent'): 1e-6,
+            ('Reference', 'dispersion'): 1e-6,
+            ('Reference', 'electrostatic'): 1e-6,
+            #('Cuda', 'covalent'): 1e-5,
+            #('Cuda', 'dispersion'): 1e-5,
+            #('Cuda', 'electrostatic'): 1e-5,
+            }
 
-    pos = system.pos.copy()
-    for i in range(30):
-        dpos = np.random.uniform(-1.0, 1.0, size=pos.shape)
-        energy_mm, forces_mm = wrapper_mm.evaluate(
-                (pos + dpos) / molmod.units.angstrom,
-                )
+    nstates   = 10
+    disp_ampl = 1.0
+    box_ampl  = 1.0
 
-        energy, forces = wrapper_yaff.evaluate(
-                (pos + dpos) / molmod.units.angstrom,
-                )
-        np.testing.assert_almost_equal(
-                energy_mm,
-                energy,
-                decimal=3,
-                )
-        np.testing.assert_almost_equal(
-                forces_mm,
-                forces,
-                decimal=3,
-                )
+    for name in systems:
+        for platform in platforms:
+            for kind in seed_kinds:
+                system, pars = get_system(name)
+                configuration = Configuration(system, pars)
+                tol = tolerance[(platform, kind)]
 
+                conversion = ExplicitConversion()
+                seed_mm = conversion.apply(configuration, seed_kind=kind)
+                seed_yaff = configuration.create_seed(kind=kind)
 
-def test_simple_electrostatic_periodic():
-    system, pars = get_system('cobdp')
-    configuration = Configuration(system, pars)
-    # YAFF and OpenMM use a different switching function. If it is disabled,
-    # the results between both are identical up to 6 decimals
-    configuration.switch_width = 0.0 # disable switching
-    rcut = 11.0
-    configuration.rcut = rcut # request cutoff of 10 angstorm
-    supercell = configuration.determine_supercell(rcut)
-    configuration.supercell = list(supercell) # set required supercell
-    conversion = ExplicitConversion(pme_error_thres=1e-5)
-    seed_kind = 'electrostatic'
-    seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
-    seed_yaff = configuration.create_seed(kind=seed_kind)
+                wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, platform)
+                wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
+                assert not wrapper_yaff.periodic # system should not be considered periodic
+                assert not wrapper_mm.periodic # system should not be considered periodic
 
-    wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
-    wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
-    assert wrapper_yaff.periodic # system should not be considered periodic
-    assert wrapper_mm.periodic # system should not be considered periodic
-
-    pos = seed_yaff.system.pos.copy()
-    rvecs = seed_yaff.system.cell._get_rvecs().copy()
-    for i in range(10):
-        dpos = np.random.uniform(-2.0, 2.0, size=pos.shape)
-        drvecs = np.random.uniform(-0.5, 0.5, size=rvecs.shape)
-        drvecs[0, 1] = 0
-        drvecs[0, 2] = 0
-        drvecs[1, 2] = 0
-        energy_mm, forces_mm = wrapper_mm.evaluate(
-                (pos + dpos) / molmod.units.angstrom,
-                rvecs=(rvecs + drvecs) / molmod.units.angstrom,
-                )
-        energy, forces = wrapper_yaff.evaluate(
-                (pos + dpos) / molmod.units.angstrom,
-                rvecs=(rvecs + drvecs) / molmod.units.angstrom,
-                )
-        np.testing.assert_almost_equal(
-                energy_mm,
-                energy,
-                decimal=1,
-                )
-        np.testing.assert_almost_equal(
-                forces_mm,
-                forces,
-                decimal=1,
-                )
+                pos = seed_yaff.system.pos.copy()
+                for i in range(nstates):
+                    dpos = np.random.uniform(-disp_ampl, disp_ampl, size=pos.shape)
+                    energy_mm, forces_mm = wrapper_mm.evaluate(
+                            (pos + dpos) / molmod.units.angstrom,
+                            )
+                    energy, forces = wrapper_yaff.evaluate(
+                            (pos + dpos) / molmod.units.angstrom,
+                            )
+                    assert_tol(energy, energy_mm, tol)
+                    assert_tol(forces, forces_mm, 10 * tol)
 
 
 def test_check_compatibility():
@@ -308,24 +174,3 @@ def test_write_annotate(tmp_path):
   pme_error_thres: 1.0e-05
 """
     ExplicitConversion.annotate(path_config)
-
-
-#def test_prefix_coverage():
-#    systems = ['mof808', 'cau13', 'ppycof', 'cof5', 'mil53']
-#    for name in systems:
-#        system, pars = get_system(name)
-#        configuration = Configuration(system, pars)
-#        configuration.switch_width = 0.0 # disable switching
-#        rcut = 10.0
-#        configuration.rcut = rcut # request cutoff of 10 angstorm
-#        supercell = configuration.determine_supercell(rcut)
-#        configuration.supercell = list(supercell) # set required supercell
-#        conversion = ExplicitConversion(pme_error_thres=1e-5)
-#        seed_kind = 'full'
-#        seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
-#        seed_yaff = configuration.create_seed(kind=seed_kind)
-#
-#        wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
-#        wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
-#        assert wrapper_yaff.periodic # system should not be considered periodic
-#        assert wrapper_mm.periodic # system should not be considered periodic
