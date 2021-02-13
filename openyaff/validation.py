@@ -64,10 +64,10 @@ class Validation:
         If parts are not separated, then it could for example be given by
 
             'yaff':
-                'full': wrapper
+                'all': wrapper
 
             'openmm':
-                ('full', CUDA): wrapper
+                ('all', CUDA): wrapper
 
         The actual validation is performed by the _internal_validate method
         which is implemented by subclasses.
@@ -88,7 +88,7 @@ class Validation:
             if self.separate_parts: # generate wrapper for each part of the FF
                 seed_kinds = ['covalent', 'dispersion', 'electrostatic']
             else:
-                seed_kinds = ['full']
+                seed_kinds = ['all']
             for kind in seed_kinds:
                 self._internal_validate(
                         configuration,
@@ -180,25 +180,56 @@ class Validation:
 
     @staticmethod
     def annotate(path_yml):
-        raise NotImplementedError
+        """Annotates a .yml file with comments regarding the current system"""
+        message = """ VALIDATION
+
+    The validation generally consists of a series of individual validation
+    experiments. Each experiment (e.g. a single point or stress validation)
+    has its own keywords.
+
+        - singlepoint:
+
+            performs a series of single point calculations on randomly generated
+            states, and compares forces and energies. Allowed keywords for this
+            experiment are:
+                nstates: the number of random states to generate
+                box_ampl: the amplitude of perturbations in box vectors
+                disp_ampl: the amplitude of perturbations in atomic coordinates
+
+        - stress:
+
+            performs a series of numerical stress calculations on randomly
+            generated states. Alowed keywords for this experiment are:
+                nstates: the number of random states to generate
+                box_ampl: the amplitude of perturbations in box vectors
+                disp_ampl: the amplitude of perturbations in atomic coordinates
+                dh: change in box vectors used in the finite difference
+                approximation of the virial stress"""
+        comments = message.splitlines()
+        for i in range(len(comments)):
+            comments[i] = '#' + comments[i]
+        comments = ['\n\n'] + comments
+
+        with open(path_yml, 'r') as f:
+            content = f.read()
+        lines = content.splitlines()
+
+        index = None
+        for i, line in enumerate(lines):
+            if line.startswith('validations'):
+                assert index is None
+                index = i
+
+        assert index is not None
+        lines = lines[:index] + comments + lines[index:]
+        with open(path_yml, 'w') as f:
+            f.write('\n'.join(lines))
 
 
-class SinglePointValidation(Validation):
-    """Implements a single point validation of energy and forces
-
-    Additional attributes
-    ---------------------
-
-    energy_tol : dict of {str: list}
-        specifies the relative tolerances to be employed in energy comparisons
-        on different parts of the force field. Each of the four tolerances
-        corresponds to a platform: [Reference, CPU, CUDA, OpenCL]
-
-    forces_tol : dict of {str: list}
-        specifies the relative tolerances to be employed in force comparisons
+class RandomStateValidation(Validation):
+    """Subclass in which validation is performed over randomly generated states
 
     """
-    name = 'singlepoint'
     properties = [
             'platforms',
             'separate_parts',
@@ -233,9 +264,13 @@ class SinglePointValidation(Validation):
         self.box_ampl = box_ampl
         super().__init__(**kwargs)
 
+
+class SinglePointValidation(RandomStateValidation):
+    """Validates energy and force calculations"""
+    name = 'singlepoint'
+
     def _internal_validate(self, configuration, conversion, platform, kind):
         """Performs single point validations"""
-
         # perform conversion, initialize arrays and wrappers
         seed_yaff = configuration.create_seed(kind)
         seed_mm   = conversion.apply(configuration, seed_kind=kind)
@@ -313,44 +348,6 @@ class SinglePointValidation(Validation):
         else:
             logger.info('\tno {} interactions present'.format(kind))
 
-    @staticmethod
-    def annotate(path_yml):
-        """Annotates a .yml file with comments regarding the current system"""
-        message = """ VALIDATION
-
-        The validation generally consists of a series of individual validation
-        experiments. Each experiment (e.g. a single point or stress validation)
-        has its own keywords.
-
-        singlepoint:
-            performs a series of single point calculations on randomly generated
-            states, and compares forces and energies. Allowed keywords for this
-            experiment are:
-
-                tol:
-                    relative tolerance on energy and forces between YAFF and
-                    OpenMM.
-                    (default: 1e-5)"""
-        comments = message.splitlines()
-        for i in range(len(comments)):
-            comments[i] = '#' + comments[i]
-        comments = ['\n\n'] + comments
-
-        with open(path_yml, 'r') as f:
-            content = f.read()
-        lines = content.splitlines()
-
-        index = None
-        for i, line in enumerate(lines):
-            if line.startswith('validations'):
-                assert index is None
-                index = i
-
-        assert index is not None
-        lines = lines[:index] + comments + lines[index:]
-        with open(path_yml, 'w') as f:
-            f.write('\n'.join(lines))
-
     def log(self):
         Validation.log(self)
         logger.info('based on single point calculations over {} '
@@ -360,6 +357,65 @@ class SinglePointValidation(Validation):
         logger.info('\t\tbox vector displacement amplitude: {} angstrom'.format(
                 self.box_ampl))
         logger.info('')
+
+
+class StressValidation(RandomStateValidation):
+    """Validates the numerical calculation of the virial stress"""
+    name = 'numerical stress'
+
+    def __init__(self, dh=1e-6, **kwargs):
+        self.dh = dh
+        super().__init__(**kwargs)
+
+    def _internal_validate(self, configuration, conversion, platform, kind):
+        """Calculates the numerical stress over a series of states"""
+        assert configuration.periodic, ('cannot compute numerical stress for '
+                'nonperiodic systems')
+
+        # perform conversion, initialize arrays and wrappers
+        seed_yaff = configuration.create_seed(kind)
+        seed_mm   = conversion.apply(configuration, seed_kind=kind)
+        stress = np.zeros((3, 6, self.nstates)) # stores energies and rel error
+        wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
+        wrapper_mm   = OpenMMForceFieldWrapper.from_seed(seed_mm, platform)
+
+        # generate states
+        states = []
+        positions = seed_yaff.system.pos.copy() / angstrom
+        rvecs = seed_yaff.system.cell._get_rvecs().copy() / angstrom
+        for i in range(self.nstates):
+            delta = 2 * self.disp_ampl * np.random.uniform(size=positions.shape)
+            state = (positions + delta,)
+            delta = 2 * self.box_ampl * np.random.uniform(size=rvecs.shape)
+            delta[0, 1] = 0
+            delta[0, 2] = 0
+            delta[1, 2] = 0
+            drvecs = rvecs + delta
+            reduce_box_vectors(drvecs) # possibly no longer reduced
+            state += (drvecs,)
+            states.append(state)
+        logger.info('')
+        logger.info('\t\tPLATFORM: {} \t\t INTERACTION: {}'.format(platform, kind))
+        logger.info('-' * 90)
+        prefixes = configuration.get_prefixes(kind)
+        if len(prefixes) > 0: # ignore empty parts
+            for i, state in enumerate(states):
+                stress_yaff = wrapper_yaff.compute_stress(
+                        *state,
+                        dh=self.dh,
+                        use_symmetric=True,
+                        )
+                stress_mm = wrapper_mm.compute_stress(
+                        *state,
+                        dh=self.dh,
+                        use_symmetric=True,
+                        )
+                # symmetrize and print six components
+                stress_yaff = (stress_yaff + stress_yaff.T) / 2
+                stress_mm = (stress_mm + stress_mm.T) / 2
+        else:
+            logger.info('\tno {} interactions present'.format(kind))
+
 
 
 def load_validations(path_yml):

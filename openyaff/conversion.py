@@ -3,8 +3,9 @@ import logging
 import numpy as np
 import simtk.openmm as mm
 
-from openyaff.utils import create_openmm_system
-from openyaff.generator import AVAILABLE_PREFIXES, apply_generators_mm
+from openyaff.utils import create_openmm_system, get_scale_index
+from openyaff.generator import COVALENT_PREFIXES, DISPERSION_PREFIXES, \
+        ELECTROSTATIC_PREFIXES, apply_generators_mm
 from openyaff.seeds import OpenMMSeed
 
 
@@ -126,13 +127,12 @@ class ExplicitConversion(Conversion):
             configuration for which to check compatibility
 
         """
+        _all = COVALENT_PREFIXES + DISPERSION_PREFIXES + ELECTROSTATIC_PREFIXES
         # check available generators
         for key, _ in configuration.parameters.sections.items():
-            assert key in AVAILABLE_PREFIXES, ('I do not have a generator '
+            assert key in _all, ('I do not have a generator '
                     'for key {}'.format(key))
-        nonbonded_prefixes = []
-        nonbonded_prefixes += configuration.dispersion_prefixes
-        nonbonded_prefixes += configuration.electrostatic_prefixes
+        nonbonded_prefixes = configuration.get_prefixes('nonbonded')
         for key, _ in configuration.parameters.sections.items():
             if key in nonbonded_prefixes: # can contain scalings
                 definition = _['SCALE']
@@ -142,7 +142,75 @@ class ExplicitConversion(Conversion):
                     scale = float(line[1].split(' ')[-1])
                     assert (scale == 0.0) or (scale == 1.0)
 
-    def apply(self, configuration, seed_kind='full'):
+    def determine_exclusion_policy(self, configuration):
+        """Determines the implementation of the nonbonded exclusions
+
+        Some OpenMM platforms (CUDA and CPU) force all nonbonded interactions
+        to use the same exclusions. However, force fields for e.g. nanoporous
+        materials often employ different exclusion policies for the dispersion
+        and electrostatic interactions (dispersion often 0 0 1, electrostatic
+        usually 1 1 1). If this is the case, then it is necessary to:
+
+            (i) create a CustomNonbondedForce with exclusions as given in the
+            parameter file
+            (ii) create NonbondedForce for electrostatics, with exclusions as
+            given in the created CustomNonbondedForce object (which will
+            generally differ from the ones given in the parameter file).
+            (iii) add CustomBondForce objects for each wrong exclusion
+            in NonbondedForce as compensation.
+
+        While this approach will work on all platforms (i.e. also the Reference
+        platform) it is generally not the best choice in terms of efficiency.
+
+        Parameters
+        ----------
+
+        configuration : Configuration
+            configuration for which to determine the exclusion implementation
+
+        Returns
+        -------
+
+        exclusion_policy : str
+            regular policy or manual
+
+        dispersion_scale_index : int
+            this int is passed onto the various generators and will determine
+            the built-in exclusions that will be used. Possible differences
+            in the electrostatic scalings are then implemented manually using
+            bonded compensation forces.
+
+        """
+        dispersion    = configuration.get_prefixes('dispersion')
+        electrostatic = configuration.get_prefixes('electrostatic')
+
+        # evaluate exclusion policy based on the scalings in the
+        # dispersion prefixes, and whether they differ from the electrostatics
+        # the scaling index for both dispersion and electrostatics is returned
+        exclusion_policy = 'regular'
+        dispersion_scale_index = None
+        if len(dispersion) == 0: # no dispersion present, use normal policy
+            pass
+        elif len(dispersion) >= 1: # check for difference with electrostatic
+            ref = None # verify all dispersion interactions have the same exclusions
+            for prefix in dispersion:
+                index_ = get_scale_index(
+                        configuration.parameters.sections[prefix]['SCALE'],
+                        )
+                if dispersion_scale_index is not None:
+                    assert (index_ == dispersion_scale_index)
+                else:
+                    dispersion_scale_index = index_
+            # iterate over present electrostatics and check if exclusions differ
+            for prefix in electrostatic:
+                scale_index = get_scale_index(
+                        configuration.parameters.sections[prefix]['SCALE'],
+                        )
+                if dispersion_scale_index != scale_index:
+                    exclusion_policy = 'manual'
+        return exclusion_policy, dispersion_scale_index
+
+    def apply(self, configuration, seed_kind='all'):
         """Converts a yaff configuration into an OpenMM seed
 
         Begins with a call to check_compatibility, and an assertion error is
@@ -156,12 +224,20 @@ class ExplicitConversion(Conversion):
         configuration : openyaff.Configuration
             configuration for which to check compatibility
 
+        platform : str
+            OpenMM platform for which to perform the conversion because
+            some conversion options (such as the exclusion policy) are platform
+            dependent.
+
         seed_kind : str
             specifies the kind of seed to be converted
 
         """
         # raise AssertionError if not compatible
         self.check_compatibility(configuration)
+        policy, dispersion_scale_index = self.determine_exclusion_policy(configuration)
+        logger.debug('exclusion policy: ' + policy)
+        logger.debug('disperion scale index: {}'.format(dispersion_scale_index))
         yaff_seed = configuration.create_seed(kind=seed_kind)
         logger.debug('creating OpenMM System object')
         system_mm = create_openmm_system(yaff_seed.system)
@@ -172,13 +248,17 @@ class ExplicitConversion(Conversion):
 
         # if system is periodic and contains electrostatis; compute PME params
         if (configuration.ewald_alphascale is not None and
-                seed_kind in ['full', 'electrostatic', 'nonbonded']):
+                seed_kind in ['all', 'electrostatic', 'nonbonded']):
             alpha = configuration.ewald_alphascale
             delta = np.exp(-(alpha) ** 2) / 2
             if delta > self.pme_error_thres:
                 kwargs['delta'] = delta
             else:
                 kwargs['delta'] = self.pme_error_thres
+        # add exclusion policy to kwargs
+        kwargs['exclusion_policy'] = policy
+        kwargs['dispersion_scale_index'] = dispersion_scale_index
+
         apply_generators_mm(yaff_seed, system_mm, **kwargs)
         openmm_seed = OpenMMSeed(system_mm)
         return openmm_seed

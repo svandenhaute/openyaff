@@ -127,19 +127,22 @@ def test_estimate_virial_stress():
 
     # verify numerical pressure computation for number of benchmark systems
     # include anisotropic systems and LJ
-    for name in ['uio66', 'cau13', 'ppycof', 'lennardjones']:
+    dh = 1e-5
+    for name in ['cau13', 'uio66', 'ppycof', 'lennardjones']:
         ff = get_system(name, return_forcefield=True)
         positions = ff.system.pos.copy()
         rvecs = ff.system.cell._get_rvecs().copy()
         vtens = np.zeros((3, 3))
+
         ff.compute(None, vtens)
         unit = molmod.units.pascal * 1e6
         pressure = np.trace(vtens) / np.linalg.det(rvecs) / unit
-
-        dUdh = estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5)
+        dUdh = estimate_cell_derivative(positions, rvecs, energy_func, dh=dh,
+                use_triangular_perturbation=False)
         vtens_numerical = rvecs.T @ dUdh
         pressure_ = np.trace(vtens_numerical) / np.linalg.det(rvecs) / unit
         assert abs(pressure - pressure_) < 1e-3 # require at least kPa accuracy
+        assert np.allclose(vtens_numerical, vtens, atol=1e-5)
 
         transform_lower_triangular(positions, rvecs, reorder=True)
         ff.update_pos(positions)
@@ -147,14 +150,14 @@ def test_estimate_virial_stress():
         vtens = np.zeros((3, 3))
         ff.compute(None, vtens)
         pressure_LT = np.trace(vtens) / np.linalg.det(rvecs) / unit
-
-        dUdh = estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5,
+        dUdh = estimate_cell_derivative(positions, rvecs, energy_func, dh=dh,
                 use_triangular_perturbation=True)
         vtens_numerical = rvecs.T @ dUdh
         pressure_LT_ = np.trace(vtens_numerical) / np.linalg.det(rvecs) / unit
-
         assert abs(pressure_LT - pressure) < 1e-8 # should be identical
         assert abs(pressure_LT_ - pressure_) < 1e-3 # require kPa accuracy
+        #assert np.allclose(vtens_numerical, vtens, atol=1e-5)
+        # VTENS != VTENS_NUMERICAL HERE!
 
         transform_symmetric(positions, rvecs)
         ff.update_pos(positions)
@@ -162,16 +165,17 @@ def test_estimate_virial_stress():
         vtens = np.zeros((3, 3))
         ff.compute(None, vtens)
         pressure_S = np.trace(vtens) / np.linalg.det(rvecs) / unit
-
-        dUdh = estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5)
+        dUdh = estimate_cell_derivative(positions, rvecs, energy_func, dh=dh)
         vtens_numerical = rvecs.T @ dUdh
+        assert np.allclose(vtens_numerical, vtens_numerical.T, atol=1e5)
         pressure_S_ = np.trace(vtens_numerical) / np.linalg.det(rvecs) / unit
-
         assert abs(pressure_S - pressure) < 1e-8 # should be identical
         assert abs(pressure_S_ - pressure_) < 1e-3 # require kPa accuracy
-        # additionally, for a symmetric cell we obtain the full vtens
-        np.testing.assert_almost_equal(
-                vtens / molmod.units.kjmol,
-                vtens_numerical / molmod.units.kjmol,
-                decimal=3,
-                )
+        assert np.allclose(vtens_numerical, vtens, atol=1e-5)
+
+        # check evaluate_using_reduced=True gives same results
+        dUdh_r = estimate_cell_derivative(positions, rvecs, energy_func, dh=dh,
+                evaluate_using_reduced=True)
+        vtens_numerical_r = rvecs.T @ dUdh_r
+        assert np.allclose(vtens_numerical_r, vtens_numerical_r.T, atol=1e-5)
+        assert np.allclose(vtens_numerical_r, vtens_numerical, atol=1e-5)

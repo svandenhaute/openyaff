@@ -1,9 +1,14 @@
 import molmod
+import logging
 import numpy as np
 import simtk.unit as unit
 import simtk.openmm as mm
 
-from openyaff.utils import yaff_generate, estimate_cell_derivative
+from openyaff.utils import yaff_generate, estimate_cell_derivative, \
+        transform_symmetric
+
+
+logger = logging.getLogger(__name__) # logging per module
 
 
 class ForceFieldWrapper:
@@ -74,26 +79,47 @@ class ForceFieldWrapper:
             else:
                 return energy
 
-    def compute_stress(self, positions, rvecs, dh=1e-6):
+    def compute_stress(self, positions, rvecs, dh=1e-6, use_symmetric=True):
         """Computes the virial stress using a finite difference scheme"""
         def energy_func(pos, cell):
             return self._internal_evaluate(pos, cell, do_forces=False)
 
-        # use triangular perturbations if cell is lower triangular
-        if (rvecs[0, 1] == 0.0 and
-            rvecs[0, 2] == 0.0 and
-            rvecs[1, 2] == 0.0):
-            use_triangular_perturbation = True
+        if not use_symmetric:
+            # use triangular perturbations if cell is lower triangular
+            if (rvecs[0, 1] == 0.0 and
+                rvecs[0, 2] == 0.0 and
+                rvecs[1, 2] == 0.0):
+                use_triangular_perturbation = True
+            else:
+                use_triangular_perturbation = False
+            dUdh = estimate_cell_derivative(
+                    positions,
+                    rvecs,
+                    energy_func,
+                    dh=dh,
+                    use_triangular_perturbation=use_triangular_perturbation,
+                    evaluate_using_reduced=True, # necessary for OpenMM wrapper
+                    )
+            stress = (rvecs.T @ dUdh) / np.linalg.det(rvecs)
         else:
-            use_triangular_perturbation = False
-        dUdh = estimate_cell_derivative(
-                positions,
-                rvecs,
-                energy_func,
-                dh=dh,
-                use_triangular_perturbation=use_triangular_perturbation,
-                )
-        return (rvecs.T @ dUdh) / np.linalg.det(rvecs)
+            pos_tmp = positions.copy()
+            rvecs_tmp = rvecs.copy()
+            transform_symmetric(pos_tmp, rvecs_tmp)
+            dUdh = estimate_cell_derivative(
+                    pos_tmp,
+                    rvecs_tmp,
+                    energy_func,
+                    dh=dh,
+                    use_triangular_perturbation=False,
+                    evaluate_using_reduced=True, # necessary for OpenMM wrapper
+                    )
+            stress = (rvecs_tmp.T @ dUdh) / np.linalg.det(rvecs_tmp)
+            if not np.allclose(stress, stress.T, atol=1e-5, rtol=1e-4):
+                logger.warning('numerical stress is not fully symmetric; '
+                        'try changing the finite difference step dh')
+                logger.warning('{}, {}'.format(stress, stress.T))
+        return stress
+
 
     def _internal_evaluate(self, positions, rvecs, do_forces):
         raise NotImplementedError

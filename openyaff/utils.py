@@ -312,7 +312,7 @@ def save_openmm_system(system_mm, path_xml):
 
 
 def estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5,
-        use_triangular_perturbation=False):
+        use_triangular_perturbation=False, evaluate_using_reduced=False):
     """Approximates the virial stress using a finite difference scheme
 
     Finite differences are only considered in nonzero cell matrix components.
@@ -354,22 +354,47 @@ def estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5,
                 (2, 0), (2, 1), (2, 2),
                 ]
 
+
     for i in range(3):
         for j in range(3):
             if (i, j) in indices:
                 rvecs_ = rvecs.copy()
                 rvecs_[i, j] -= dh / 2
+
+                pos_tmp   = np.dot(fractional, rvecs_)
+                rvecs_tmp = rvecs_.copy()
+                if evaluate_using_reduced:
+                    transform_lower_triangular(pos_tmp, rvecs_tmp)
+                    reduce_box_vectors(rvecs_tmp)
                 E_minus = energy_func(
-                        np.dot(fractional, rvecs_), # new pos
-                        rvecs_,
+                        pos_tmp,
+                        rvecs_tmp,
                         )
+
                 rvecs_[i, j] += dh
+                pos_tmp   = np.dot(fractional, rvecs_)
+                rvecs_tmp = rvecs_.copy()
+                if evaluate_using_reduced:
+                    transform_lower_triangular(pos_tmp, rvecs_tmp)
+                    reduce_box_vectors(rvecs_tmp)
                 E_pluss = energy_func(
-                        np.dot(fractional, rvecs_), # new pos
-                        rvecs_,
+                        pos_tmp,
+                        rvecs_tmp,
                         )
                 dUdh[i, j] = (E_pluss - E_minus) / dh
     return dUdh
+
+
+def get_scale_index(definition):
+    """Computes the scale index of a SCALE parameter definition"""
+    scale_index = 0
+    for line in definition.lines:
+        # scaling is last part of string
+        scale = float(line[1].split(' ')[-1])
+        if scale == 0.0:
+            scale_index += 1
+    assert scale_index <= 3
+    return scale_index
 
 
 class Colors:

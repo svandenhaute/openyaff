@@ -101,7 +101,7 @@ def test_create_seed_periodic():
     ff = yaff_generate(seed_nonbonded)
     energy_nonbonded = ff.compute()
 
-    seed_full = configuration.create_seed(kind='full')
+    seed_full = configuration.create_seed(kind='all')
     ff = yaff_generate(seed_full)
     energy_full = ff.compute()
 
@@ -138,7 +138,7 @@ def test_create_seed_nonperiodic():
     ff = yaff_generate(seed_nonbonded)
     energy_nonbonded = ff.compute()
 
-    seed_full = configuration.create_seed(kind='full')
+    seed_full = configuration.create_seed(kind='all')
     ff = yaff_generate(seed_full)
     energy_full = ff.compute()
 

@@ -179,7 +179,7 @@ def main():
         initialize(cwd, args.save_reduced)
     elif args.mode == 'convert':
         seed_kind = args.interaction
-        assert seed_kind in ['all', 'covalent', 'dispersion', 'electrostatic', 'all']
+        assert seed_kind in ['all', 'covalent', 'dispersion', 'electrostatic']
         convert(cwd, seed_kind=seed_kind)
         pass
     elif args.mode == 'validate':

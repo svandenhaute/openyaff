@@ -10,25 +10,12 @@ from openyaff.utils import determine_rcut, transform_lower_triangular, \
         compute_lengths_angles, is_lower_triangular, is_reduced, \
         reduce_box_vectors, log_header
 from openyaff.seeds import YaffSeed
+from openyaff.generator import COVALENT_PREFIXES, DISPERSION_PREFIXES, \
+        ELECTROSTATIC_PREFIXES
 import openyaff.generator
 
 
 logger = logging.getLogger(__name__) # logging per module
-
-
-# determine supported covalent, dispersion and electrostatic prefixes
-COVALENT_PREFIXES      = []
-DISPERSION_PREFIXES    = []
-ELECTROSTATIC_PREFIXES = ['FIXQ'] # FIXQ is only electrostatic prefix
-for x in list(openyaff.generator.__dict__.values()):
-    if isinstance(x, type) and issubclass(x, yaff.Generator) and x.prefix is not None:
-        if (issubclass(x, openyaff.generator.ValenceMirroredGenerator) or
-                issubclass(x, openyaff.generator.ValenceCrossMirroredGenerator)):
-            COVALENT_PREFIXES.append(x.prefix)
-        elif x.prefix in ELECTROSTATIC_PREFIXES:
-            pass # ELECTROSTATIC_PREFIXES already determined
-        else:
-            DISPERSION_PREFIXES.append(x.prefix)
 
 
 class Configuration:
@@ -49,9 +36,6 @@ class Configuration:
             'ewald_alphascale',
             'ewald_gcutscale',
             ]
-    covalent_prefixes      = COVALENT_PREFIXES
-    dispersion_prefixes    = DISPERSION_PREFIXES
-    electrostatic_prefixes = ELECTROSTATIC_PREFIXES
 
     def __init__(self, system, pars):
         """Constructor
@@ -87,7 +71,7 @@ class Configuration:
         # if properties are not applicable, they are initialized to None
         self.initialize_properties()
 
-    def create_seed(self, kind='full'):
+    def create_seed(self, kind='all'):
         """Creates a seed for constructing a yaff.ForceField object
 
         The returned seed contains all objects that are required in order to
@@ -100,7 +84,7 @@ class Configuration:
         to different parts -- this is done using the kind parameter. Allowed
         values are:
 
-                - full:
+                - all:
                     generates the entire force field
 
                 - covalent
@@ -123,21 +107,21 @@ class Configuration:
 
         kind : str, optional
             specifies the kind of seed to be created. Allowed values are
-            'full', 'covalent', 'nonbonded', 'dispersion', 'electrostatic'
+            'all', 'covalent', 'nonbonded', 'dispersion', 'electrostatic'
 
         """
-        assert kind in ['full', 'covalent', 'nonbonded', 'dispersion', 'electrostatic']
+        assert kind in ['all', 'covalent', 'nonbonded', 'dispersion', 'electrostatic']
         parameters = self.parameters.copy()
-        if kind == 'full':
+        if kind == 'all':
             pass # do nothing, all prefixes should be retained
         elif kind == 'covalent':
             # pop all dispersion and electrostatic prefixes:
-            for key in (self.dispersion_prefixes + self.electrostatic_prefixes):
+            for key in (DISPERSION_PREFIXES + ELECTROSTATIC_PREFIXES):
                 parameters.sections.pop(key, None) # returns None if not present
         elif kind == 'nonbonded':
             # retain only dispersion and electrostatic
             sections = {}
-            for key in (self.dispersion_prefixes + self.electrostatic_prefixes):
+            for key in (DISPERSION_PREFIXES + ELECTROSTATIC_PREFIXES):
                 section = parameters.sections.get(key, None)
                 if section is not None: # only add if present
                     sections[key] = section
@@ -145,7 +129,7 @@ class Configuration:
         elif kind == 'dispersion':
             # retain only dispersion
             sections = {}
-            for key in self.dispersion_prefixes:
+            for key in DISPERSION_PREFIXES:
                 section = parameters.sections.get(key, None)
                 if section is not None: # only add if present
                     sections[key] = section
@@ -153,7 +137,7 @@ class Configuration:
         elif kind == 'electrostatic':
             # retain only electrostatic
             sections = {}
-            for key in self.electrostatic_prefixes:
+            for key in ELECTROSTATIC_PREFIXES:
                 section = parameters.sections.get(key, None)
                 if section is not None: # only add if present
                     sections[key] = section
@@ -252,17 +236,17 @@ class Configuration:
         """
         prefixes = []
         if kind == 'covalent':
-            target = self.covalent_prefixes
+            target = COVALENT_PREFIXES
         elif kind == 'dispersion':
-            target = self.dispersion_prefixes
+            target = DISPERSION_PREFIXES
         elif kind == 'electrostatic':
-            target = self.electrostatic_prefixes
+            target = ELECTROSTATIC_PREFIXES
         elif kind == 'nonbonded':
-            target = self.dispersion_prefixes + self.electrostatic_prefixes
+            target = DISPERSION_PREFIXES + ELECTROSTATIC_PREFIXES
         elif kind == 'all':
-            target = (self.covalent_prefixes +
-                    self.dispersion_prefixes +
-                    self.electrostatic_prefixes)
+            target = (COVALENT_PREFIXES +
+                      DISPERSION_PREFIXES +
+                      ELECTROSTATIC_PREFIXES)
         for prefix in self.prefixes:
             if prefix in target:
                 prefixes.append(prefix)
@@ -276,7 +260,7 @@ class Configuration:
         if self.periodic:
             natom     = np.prod(np.array(self.supercell)) * self.system.natom
         else:
-            natom = system.natom
+            natom = self.system.natom
         config = {}
         for name in self.properties:
             value = getattr(self, name)
@@ -550,11 +534,7 @@ class Configuration:
 
         """
         # rcut applicable only to nonbonded force parts:
-        if (self.periodic and (
-            ('MM3' in self.prefixes) or
-            ('LJ' in self.prefixes)  or
-            ('LJCROSS' in self.prefixes)  or
-            ('FIXQ' in self.prefixes))):
+        if (self.periodic and (len(self.get_prefixes('nonbonded')) > 0)):
             assert type(value) == float
             self._rcut = value
             return True
@@ -583,10 +563,7 @@ class Configuration:
             cutoff. (YAFF default value is 4 angstrom)
 
         """
-        if (self.periodic and (
-            ('MM3' in self.prefixes) or
-            ('LJCROSS' in self.prefixes) or
-            ('LJ' in self.prefixes))):
+        if (self.periodic and (len(self.get_prefixes('dispersion')) > 0)):
             assert type(value) == float
             self._switch_width = value
             return True
@@ -614,10 +591,7 @@ class Configuration:
         """
         # tailcorrections apply only to dispersion nonbonded force parts in
         # periodic systems:
-        if self.periodic and (
-                ('MM3' in self.prefixes) or
-                ('LJ' in self.prefixes) or
-                ('LJCROSS' in self.prefixes)):
+        if (self.periodic and (len(self.get_prefixes('dispersion')) > 0)):
             assert type(value) == bool
             self._tailcorrections = value
             return True
@@ -644,7 +618,7 @@ class Configuration:
 
         """
         # ewald parameters apply only to periodic systems with electrostatics
-        if 'FIXQ' in self.prefixes and self.periodic:
+        if ('FIXQ' in self.prefixes) and self.periodic:
             assert type(value) == float
             self._ewald_alphascale = value
         else:
@@ -670,7 +644,7 @@ class Configuration:
 
         """
         # ewald parameters apply only to periodic systems with electrostatics
-        if 'FIXQ' in self.prefixes and self.periodic:
+        if ('FIXQ' in self.prefixes) and self.periodic:
             assert type(value) == float
             self._ewald_gcutscale = value
         else:

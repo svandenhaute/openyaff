@@ -2,7 +2,7 @@ import numpy as np
 import molmod
 
 from openyaff import YaffForceFieldWrapper
-from openyaff.utils import estimate_cell_derivative
+from openyaff.utils import estimate_cell_derivative, transform_symmetric
 
 from systems import get_system
 
@@ -64,12 +64,26 @@ def test_ff_yaff_stress():
     stress_w = wrapper.compute_stress(
             positions / molmod.units.angstrom,
             rvecs / molmod.units.angstrom,
+            use_symmetric=False,
             )
-    np.testing.assert_almost_equal(
-            stress_w,
-            stress_,
-            decimal=5,
+    assert np.allclose(stress_w, stress_, atol=1e-5)
+
+    # compute vtens using symmetric box, and verify compute_stress symmetric
+    pos_tmp = positions.copy()
+    rvecs_tmp = rvecs.copy()
+    transform_symmetric(pos_tmp, rvecs_tmp)
+    ff.update_pos(pos_tmp)
+    ff.update_rvecs(rvecs_tmp)
+    vtens = np.zeros((3, 3))
+    ff.compute(None, vtens)
+    stress_vtens = vtens / np.linalg.det(rvecs)
+    stress_vtens /= (molmod.units.kjmol / molmod.units.angstrom ** 3)
+    stress_wrapper = wrapper.compute_stress(
+            positions / molmod.units.angstrom,
+            rvecs / molmod.units.angstrom,
+            use_symmetric=True,
             )
+    assert np.allclose(stress_wrapper, stress_vtens, atol=1e-5)
 
 
 def test_ff_yaff_nonperiodic():
