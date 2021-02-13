@@ -237,7 +237,7 @@ class ExplicitConversion(Conversion):
         self.check_compatibility(configuration)
         policy, dispersion_scale_index = self.determine_exclusion_policy(configuration)
         logger.debug('exclusion policy: ' + policy)
-        logger.debug('disperion scale index: {}'.format(dispersion_scale_index))
+        logger.debug('dispersion scale index: {}'.format(dispersion_scale_index))
         yaff_seed = configuration.create_seed(kind=seed_kind)
         logger.debug('creating OpenMM System object')
         system_mm = create_openmm_system(yaff_seed.system)

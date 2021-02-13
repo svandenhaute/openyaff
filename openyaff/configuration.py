@@ -67,6 +67,13 @@ class Configuration:
         self.parameters = parameters
         self.prefixes = [key for key, _ in parameters.sections.items()]
 
+        # check whether all prefixes are supported
+        for prefix in self.prefixes:
+            _all = (COVALENT_PREFIXES +
+                    DISPERSION_PREFIXES +
+                    ELECTROSTATIC_PREFIXES)
+            assert prefix in _all, 'I do not know prefix {}'.format(prefix)
+
         # use setters to initialize properties to default YAFF values
         # if properties are not applicable, they are initialized to None
         self.initialize_properties()
@@ -429,10 +436,18 @@ class Configuration:
         config : dict
             dictionary, e.g. loaded from .yml file
         """
+        determine_supercell = False
         for name in self.properties:
             if name in config['yaff'].keys():
+                if name == 'supercell': # special treatment
+                    if tuple(config['yaff'][name]) == (-1, -1, -1):
+                        determine_supercell = True
+                        config['yaff'][name] = [1, 1, 1] # dummy
                 # following should not raise anything
                 setattr(self, name, config['yaff'][name])
+
+        if determine_supercell: # determine supercell after all properties are set
+            self.supercell = self.determine_supercell(self.rcut)
 
     @staticmethod
     def annotate(path_yml):

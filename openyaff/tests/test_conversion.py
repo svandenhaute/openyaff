@@ -125,6 +125,9 @@ def test_nonperiodic():
 
 def test_check_compatibility():
     system, _ = get_system('lennardjones')
+    conversion = ExplicitConversion()
+    seed_kind = 'dispersion'
+
     # generate pars with unsupported prefix
     pars_unsupported = """
     MM3CAP:UNIT SIGMA angstrom
@@ -139,11 +142,8 @@ def test_check_compatibility():
 
     MM3CAP:PARS      C     2.360   0.116      0"""
 
-    configuration = Configuration(system, pars_unsupported)
-    conversion = ExplicitConversion()
-    seed_kind = 'dispersion'
     with pytest.raises(AssertionError):
-        seed_mm = conversion.apply(configuration, seed_kind=seed_kind)
+        configuration = Configuration(system, pars_unsupported)
 
     # generate pars with unsupported scaling
     pars_unsupported = """

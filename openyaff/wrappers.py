@@ -115,9 +115,9 @@ class ForceFieldWrapper:
                     )
             stress = (rvecs_tmp.T @ dUdh) / np.linalg.det(rvecs_tmp)
             if not np.allclose(stress, stress.T, atol=1e-5, rtol=1e-4):
-                logger.warning('numerical stress is not fully symmetric; '
+                logger.debug('numerical stress is not fully symmetric; '
                         'try changing the finite difference step dh')
-                logger.warning('{}, {}'.format(stress, stress.T))
+                logger.debug('{}'.format(stress))
         return stress
 
 
@@ -224,6 +224,10 @@ class OpenMMForceFieldWrapper(ForceFieldWrapper):
         # integrator is necessary to create context
         integrator = mm.VerletIntegrator(0.5 * unit.femtosecond)
         platform = mm.Platform.getPlatformByName(platform_name)
+        logger.debug('platform supports double precision: {}'.format(
+            platform.supportsDoublePrecision()))
+        if platform in ['CUDA', 'CPU', 'OpenCL']:
+            platform.setPropertyDefaultValue('Precision', 'Double')
         self.context = mm.Context(system_mm, integrator, platform)
 
     def _internal_evaluate(self, positions, rvecs, do_forces):

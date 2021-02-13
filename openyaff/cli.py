@@ -1,3 +1,4 @@
+import molmod
 import argparse
 import logging
 import yaff
@@ -7,7 +8,8 @@ from pathlib import Path
 from openyaff.utils import add_header_to_config, determine_rcut, \
         save_openmm_system
 from openyaff import Configuration, load_conversion, load_validations, \
-        ExplicitConversion, SinglePointValidation
+        ExplicitConversion, SinglePointValidation, StressValidation, \
+        OpenMMForceFieldWrapper
 
 
 yaff.log.set_level(yaff.log.silent)
@@ -70,6 +72,25 @@ def convert(cwd, seed_kind):
     configuration.log_config()
     conversion = load_conversion(path_yml)
     openmm_seed = conversion.apply(configuration, seed_kind)
+
+
+    # quick single point calculation on all platforms to verify
+    platforms = ['Reference', 'CPU', 'CUDA', 'OpenCL']
+    u = molmod.units.angstrom
+    yaff_seed = configuration.create_seed(seed_kind)
+    for platform in platforms:
+        logger.debug('test single point calculation on {} platform'.format(
+            platform))
+        wrapper = OpenMMForceFieldWrapper.from_seed(
+                openmm_seed,
+                platform,
+                )
+        wrapper.evaluate(
+                yaff_seed.system.pos / u,
+                yaff_seed.system.cell._get_rvecs() / u,
+                do_forces=True,
+                )
+
     path_xml = cwd / 'system.xml'
     logger.info('saving OpenMM System object to ')
     logger.info(path_xml)
@@ -91,6 +112,7 @@ def initialize(cwd, save_reduced=False):
     default_classes = [ # classes for which to initialize .yml keywords
             ExplicitConversion,
             SinglePointValidation,
+            StressValidation,
             ]
 
     # initialize Configuration based on defaults
@@ -102,7 +124,6 @@ def initialize(cwd, save_reduced=False):
         configuration.supercell = supercell # smallest usable supercell
     configuration.log_system()
     configuration.log_config()
-    logger.info('')
     logger.info('writing configuration file to')
     logger.info(str(path_yml))
     configuration.write(path_yml)

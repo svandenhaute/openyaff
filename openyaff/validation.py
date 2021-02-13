@@ -274,7 +274,7 @@ class SinglePointValidation(RandomStateValidation):
         # perform conversion, initialize arrays and wrappers
         seed_yaff = configuration.create_seed(kind)
         seed_mm   = conversion.apply(configuration, seed_kind=kind)
-        energy = np.zeros((3, self.nstates)) # stores energies and rel error
+        energy = np.zeros((4, self.nstates)) # stores energies and rel error
         forces = np.zeros((3, self.nstates, seed_yaff.system.natom, 3))
         wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
         wrapper_mm   = OpenMMForceFieldWrapper.from_seed(seed_mm, platform)
@@ -302,10 +302,13 @@ class SinglePointValidation(RandomStateValidation):
         prefixes = configuration.get_prefixes(kind)
         if len(prefixes) > 0: # ignore empty parts
             nspaces = 10
+            last = 5
             header = '     YAFF [kJ/mol]'
             header += nspaces * ' '
             header += '  OpenMM [kJ/mol]'
             header += nspaces * ' '
+            header += '   delta [kJ/mol]'
+            header += last * ' '
             header += 'relative error'
             logger.info(header)
 
@@ -318,14 +321,15 @@ class SinglePointValidation(RandomStateValidation):
                         *state,
                         do_forces=True,
                         )
-                energy[2, i] = np.abs(energy[1, i] - energy[0, i])
-                energy[2, i] /= np.abs(energy[0, i])
+                energy[2, i] = energy[1, i] - energy[0, i]
+                energy[3, i] = np.abs(energy[2, i]) / np.abs(energy[0, i])
                 line = ' {:17.4f}'.format(energy[0, i])
                 line += nspaces * ' '
                 line += '{:17.4f}'.format(energy[1, i])
                 line += nspaces * ' '
-                line += '{:14.4e}'.format(energy[2, i])
-                line += nspaces * ' '
+                line += '{:17.4f}'.format(energy[2, i])
+                line += last * ' '
+                line += '{:14.4e}'.format(energy[3, i])
                 logger.info(line)
 
             df = np.abs(forces[1, :] - forces[0, :])
@@ -363,9 +367,10 @@ class StressValidation(RandomStateValidation):
     """Validates the numerical calculation of the virial stress"""
     name = 'numerical stress'
 
-    def __init__(self, dh=1e-6, **kwargs):
+    def __init__(self, dh=1e-6, nstates=1, **kwargs):
         self.dh = dh
         super().__init__(**kwargs)
+        self.nstates = nstates # override default value of parent
 
     def _internal_validate(self, configuration, conversion, platform, kind):
         """Calculates the numerical stress over a series of states"""
@@ -395,10 +400,18 @@ class StressValidation(RandomStateValidation):
             state += (drvecs,)
             states.append(state)
         logger.info('')
+        logger.info('')
         logger.info('\t\tPLATFORM: {} \t\t INTERACTION: {}'.format(platform, kind))
         logger.info('-' * 90)
         prefixes = configuration.get_prefixes(kind)
         if len(prefixes) > 0: # ignore empty parts
+            nspaces = 4
+            header = ' ' * (9) + 'YAFF [kJ/angstrom**3]'
+            header += nspaces * ' '
+            header += '  OpenMM [kJ/angstrom**3]'
+            header += nspaces * ' '
+            header += '   delta [kJ/angstrom**3]'
+            logger.info(header)
             for i, state in enumerate(states):
                 stress_yaff = wrapper_yaff.compute_stress(
                         *state,
@@ -413,6 +426,80 @@ class StressValidation(RandomStateValidation):
                 # symmetrize and print six components
                 stress_yaff = (stress_yaff + stress_yaff.T) / 2
                 stress_mm = (stress_mm + stress_mm.T) / 2
+                nspaces = 9
+                start = 3
+                value_yaff = np.trace(stress_yaff) / 3
+                value_mm   = np.trace(stress_mm) / 3
+                line = 'PRESSURE:' + start * ' '
+                line += '{:17.4f}'.format(value_yaff)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_mm)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_yaff - value_mm)
+                logger.info(line)
+
+                value_yaff = stress_yaff[0, 0] / 3
+                value_mm   = stress_mm[0, 0] / 3
+                line = 'sigma_xx:' + start * ' '
+                line += '{:17.4f}'.format(value_yaff)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_mm)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_yaff - value_mm)
+                logger.info(line)
+
+                value_yaff = stress_yaff[1, 1] / 3
+                value_mm   = stress_mm[1, 1] / 3
+                line = 'sigma_yy:' + start * ' '
+                line += '{:17.4f}'.format(value_yaff)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_mm)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_yaff - value_mm)
+                logger.info(line)
+
+                value_yaff = stress_yaff[2, 2] / 3
+                value_mm   = stress_mm[2, 2] / 3
+                line = 'sigma_zz:' + start * ' '
+                line += '{:17.4f}'.format(value_yaff)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_mm)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_yaff - value_mm)
+                logger.info(line)
+
+                value_yaff = stress_yaff[1, 2] / 3
+                value_mm   = stress_mm[1, 2] / 3
+                line = 'sigma_yz:' + start * ' '
+                line += '{:17.4f}'.format(value_yaff)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_mm)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_yaff - value_mm)
+                logger.info(line)
+
+                value_yaff = stress_yaff[0, 2] / 3
+                value_mm   = stress_mm[0, 2] / 3
+                line = 'sigma_xz:' + start * ' '
+                line += '{:17.4f}'.format(value_yaff)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_mm)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_yaff - value_mm)
+                logger.info(line)
+
+                value_yaff = stress_yaff[0, 1] / 3
+                value_mm   = stress_mm[0, 1] / 3
+                line = 'sigma_xy:' + start * ' '
+                line += '{:17.4f}'.format(value_yaff)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_mm)
+                line += nspaces * ' '
+                line += '{:17.4f}'.format(value_yaff - value_mm)
+                logger.info(line)
+                logger.info('')
+
+
         else:
             logger.info('\tno {} interactions present'.format(kind))
 
