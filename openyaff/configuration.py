@@ -30,6 +30,7 @@ class Configuration:
     """
     properties = [
             'supercell',
+            'cell_interaction_radius',
             'rcut',
             'switch_width',
             'tailcorrections',
@@ -317,7 +318,7 @@ class Configuration:
             logger.info('\tb: {:.4f}'.format(lengths[1]))
             logger.info('\tc: {:.4f}'.format(lengths[2]))
             logger.info('')
-            logger.info('reduced box angles (in degrees):')
+            #logger.info('reduced box angles (in degrees):')
             logger.info('\talpha: {:.4f}'.format(angles[0]))
             logger.info('\tbeta : {:.4f}'.format(angles[1]))
             logger.info('\tgamma: {:.4f}'.format(angles[2]))
@@ -402,8 +403,14 @@ class Configuration:
         except ValueError:
             pass
 
+        rcut_default = yaff.FFArgs().rcut / molmod.units.angstrom
         try:
-            self.rcut = yaff.FFArgs().rcut / molmod.units.angstrom
+            self.cell_interaction_radius = rcut_default
+        except ValueError:
+            pass
+
+        try:
+            self.rcut = rcut_default
         except ValueError:
             pass
 
@@ -436,18 +443,37 @@ class Configuration:
         config : dict
             dictionary, e.g. loaded from .yml file
         """
-        determine_supercell = False
         for name in self.properties:
             if name in config['yaff'].keys():
-                if name == 'supercell': # special treatment
-                    if tuple(config['yaff'][name]) == (-1, -1, -1):
-                        determine_supercell = True
-                        config['yaff'][name] = [1, 1, 1] # dummy
-                # following should not raise anything
                 setattr(self, name, config['yaff'][name])
 
-        if determine_supercell: # determine supercell after all properties are set
-            self.supercell = self.determine_supercell(self.rcut)
+        # double check whether nonbonded cutoff is smaller than cell size
+        if self.rcut is not None:
+            assert self.rcut <= self.cell_interaction_radius
+
+        # The supercell is determined based on the user input in the following
+        # way:
+        # 
+        # 1. the cell specified by the supercell keyword is evaluated to see
+        #    if it is large enough to accomodate interactions with a range
+        #    as specified by the cell_interaction_radius keyword. If it is, then the
+        #    supercell is valid for this system.
+        # 2. If it is not large enough, then this value is ignored. Instead,
+        #    a short calculation is performed in order to determine the smallest
+        #    possible supercell that is compatible with the given
+        #    cell_interaction_radius keyword.
+
+        if self.periodic:
+            assert self.supercell is not None
+            rvecs = self.system.cell._get_rvecs()
+            supercell = tuple(self.supercell)
+            rvecs_ = np.array(supercell)[:, np.newaxis] * rvecs
+            allowed_rcut = determine_rcut(rvecs_)
+            if allowed_rcut > self.cell_interaction_radius:
+                pass # do nothing, self.supercell is OK
+            else: # determine smallest possible supercell that is compatible
+                supercell = self.determine_supercell(self.cell_interaction_radius)
+                self.supercell = supercell
 
     @staticmethod
     def annotate(path_yml):
@@ -528,7 +554,21 @@ class Configuration:
             self._supercell = list(value) # store as list because of pyyaml
         else: # property not applicable
             self._supercell = None
-            raise ValueError('Cannot set supercell because system is aperiodic')
+            raise ValueError('Cannot use supercell keyword because system is '
+                    'aperiodic')
+
+    @property
+    def cell_interaction_radius(self):
+        return self._cell_radius
+
+    @cell_interaction_radius.setter
+    def cell_interaction_radius(self, value):
+        if self.periodic:
+            self._cell_radius = value
+        else: # property not applicable
+            self._cell_radius = None
+            raise ValueError('Cannot use cell_interaction_radius keyword '
+                    'because system is nonperiodic')
 
     @property
     def rcut(self):
@@ -552,6 +592,10 @@ class Configuration:
         if (self.periodic and (len(self.get_prefixes('nonbonded')) > 0)):
             assert type(value) == float
             self._rcut = value
+            assert self.cell_interaction_radius is not None
+            if self.rcut > self.cell_interaction_radius:
+                logger.debug('increasing cell_interaction_radius to rcut')
+                self.cell_interaction_radius = self.rcut
             return True
         else: # property not applicable
             self._rcut = None

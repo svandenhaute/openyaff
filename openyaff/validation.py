@@ -298,7 +298,7 @@ class SinglePointValidation(RandomStateValidation):
             states.append(state)
         logger.info('')
         logger.info('\t\tPLATFORM: {} \t\t INTERACTION: {}'.format(platform, kind))
-        logger.info('-' * 90)
+        logger.info('-' * 91)
         prefixes = configuration.get_prefixes(kind)
         if len(prefixes) > 0: # ignore empty parts
             nspaces = 10
@@ -346,7 +346,7 @@ class SinglePointValidation(RandomStateValidation):
             line += nspaces * ' '
             line += 'max={:.1e}'.format(np.max(error) / norm)
             logger.info(line)
-            logger.info('-' * 90)
+            logger.info('-' * 91)
             logger.info('')
             logger.info('')
         else:
@@ -366,6 +366,14 @@ class SinglePointValidation(RandomStateValidation):
 class StressValidation(RandomStateValidation):
     """Validates the numerical calculation of the virial stress"""
     name = 'numerical stress'
+    properties = [
+            'platforms',
+            'separate_parts',
+            'nstates',
+            'disp_ampl',
+            'box_ampl',
+            'dh',
+            ]
 
     def __init__(self, dh=1e-6, nstates=1, **kwargs):
         self.dh = dh
@@ -502,7 +510,6 @@ class StressValidation(RandomStateValidation):
 
         else:
             logger.info('\tno {} interactions present'.format(kind))
-
 
 
 def load_validations(path_yml):

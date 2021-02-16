@@ -95,16 +95,6 @@ def cau13(return_forcefield=False):
     return system, pars
 
 
-def mof808(return_forcefield=False):
-    """Generate MOF808 system from YAFF input files"""
-    path_system = str(here / 'mof808' / 'system.chk')
-    path_pars = str(here / 'mof808' / 'pars.txt')
-    system = yaff.System.from_file(path_system)
-    with open(path_pars, 'r') as f:
-        pars = f.read()
-    return system, pars
-
-
 def ppycof(return_forcefield=False):
     """Generate PPYCOF system from YAFF input files"""
     path_system = str(here / 'ppycof' / 'system.chk')
@@ -155,8 +145,6 @@ def get_system(name, return_forcefield=False, **kwargs):
         system, pars = mof5(**kwargs)
     elif name == 'cau13':
         system, pars = cau13(**kwargs)
-    elif name == 'mof808':
-        system, pars = mof808(**kwargs)
     elif name == 'ppycof':
         system, pars = ppycof(**kwargs)
     elif name == 'uio66':

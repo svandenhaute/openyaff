@@ -17,6 +17,7 @@ def test_initialize_periodic(tmp_path):
     with open(path_config, 'r') as f:
         content = f.read()
     assert content == """yaff:
+  cell_interaction_radius: 10.0
   rcut: 10.0
   supercell:
   - 1
@@ -46,6 +47,7 @@ def test_update_properties(tmp_path):
 
     config = configuration.write()
     config['yaff']['rcut'] = 15.0
+    config['yaff']['cell_interaction_radius'] = 15.0
     configuration.update_properties(config)
     assert configuration.rcut == 15.0
 

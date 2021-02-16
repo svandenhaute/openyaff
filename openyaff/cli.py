@@ -2,11 +2,15 @@ import molmod
 import argparse
 import logging
 import yaff
+import simtk.openmm as mm
+import simtk.unit as unit
+import simtk.openmm.app
+import numpy as np
 
 from pathlib import Path
 
 from openyaff.utils import add_header_to_config, determine_rcut, \
-        save_openmm_system
+        serialize, create_openmm_topology
 from openyaff import Configuration, load_conversion, load_validations, \
         ExplicitConversion, SinglePointValidation, StressValidation, \
         OpenMMForceFieldWrapper
@@ -58,14 +62,14 @@ def validate(cwd):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
     configuration = Configuration.from_files(*input_files, path_yml)
-    # TODO: check rcut setting
+    configuration.log_config()
     conversion = load_conversion(path_yml)
     validations = load_validations(path_yml)
     for validation in validations:
         validation.run(configuration, conversion)
 
 
-def convert(cwd, seed_kind):
+def convert(cwd, seed_kind, full):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
     configuration = Configuration.from_files(*input_files, path_yml)
@@ -90,11 +94,21 @@ def convert(cwd, seed_kind):
                 yaff_seed.system.cell._get_rvecs() / u,
                 do_forces=True,
                 )
-
     path_xml = cwd / 'system.xml'
     logger.info('saving OpenMM System object to ')
     logger.info(path_xml)
-    save_openmm_system(openmm_seed.system_mm, path_xml)
+    serialize(openmm_seed.system_mm, path_xml)
+
+    if full: # write additional files
+        topology = create_openmm_topology(yaff_seed.system)
+        if yaff_seed.system.cell.nvec != 0: # check box vectors are included
+            assert topology.getPeriodicBoxVectors() is not None
+        u = molmod.units.angstrom / unit.angstrom
+        mm.app.PDBxFile.writeFile(
+                topology,
+                yaff_seed.system.pos / u,
+                open(cwd / 'topology.pdb', 'w+'),
+                )
 
 
 def initialize(cwd, save_reduced=False):
@@ -184,6 +198,13 @@ def main():
             default=False,
             help='enables debug mode',
             )
+    parser.add_argument(
+            '-f',
+            '--full',
+            action='store_true',
+            default=False,
+            help='write topology and state files necessary to run simulations',
+            )
     args = parser.parse_args()
 
     # enable logging
@@ -201,7 +222,7 @@ def main():
     elif args.mode == 'convert':
         seed_kind = args.interaction
         assert seed_kind in ['all', 'covalent', 'dispersion', 'electrostatic']
-        convert(cwd, seed_kind=seed_kind)
+        convert(cwd, seed_kind=seed_kind, full=args.full)
         pass
     elif args.mode == 'validate':
         validate(cwd)

@@ -2,6 +2,7 @@ import yaff
 import molmod
 import numpy as np
 import simtk.unit as unit
+import simtk.openmm.app
 import simtk.openmm as mm
 
 from datetime import datetime
@@ -247,6 +248,37 @@ def create_openmm_system(system):
     return system_mm
 
 
+def create_openmm_topology(system):
+    """Creates OpenMM Topology from yaff System instance"""
+    top = mm.app.Topology()
+    chain = top.addChain()
+    res = top.addResidue('res', chain)
+    elements = []
+    atoms = []
+    for i in range(system.natom):
+        mass = system.masses[i] / molmod.units.amu * unit.dalton
+        elements.append(
+                mm.app.Element.getByMass(mass),
+                )
+    for i in range(system.natom):
+        element = elements[i]
+        name = str(i)
+        atoms.append(top.addAtom(
+                name,
+                element,
+                res,
+                ))
+    for bond in system.bonds:
+        top.addBond(atoms[bond[0]], atoms[bond[1]])
+    u = molmod.units.nanometer # should be of type 'float', not 'unit'
+    top.setPeriodicBoxVectors([
+            system.cell._get_rvecs()[0] / u,
+            system.cell._get_rvecs()[1] / u,
+            system.cell._get_rvecs()[2] / u,
+            ])
+    return top
+
+
 def add_header_to_config(path_yml):
     """Adds header with information to config file"""
     message = """
@@ -291,20 +323,20 @@ The configuration is divided into three parts:
         f.write(content)
 
 
-def save_openmm_system(system_mm, path_xml):
-    """Uses the XmlSerializer to store an OpenMM system object
+def serialize(mm_object, path_xml):
+    """Uses the XmlSerializer to save OpenMM objects to file
 
     Parameters
     ----------
 
-    system_mm : OpenMM.System
-        system instance to serialize
+    mm_object : OpenMM object
+        instance to serialize. (e.g. System, State, Topology)
 
     path_xml : pathlib.Path
         filepath
 
     """
-    xml = mm.XmlSerializer.serialize(system_mm)
+    xml = mm.XmlSerializer.serialize(mm_object)
     if path_xml.exists():
         path_xml.unlink() # remove file if it exists
     with open(path_xml, 'w') as f:

@@ -226,9 +226,10 @@ class OpenMMForceFieldWrapper(ForceFieldWrapper):
         platform = mm.Platform.getPlatformByName(platform_name)
         logger.debug('platform supports double precision: {}'.format(
             platform.supportsDoublePrecision()))
-        if platform in ['CUDA', 'CPU', 'OpenCL']:
+        if platform_name in ['CUDA', 'OpenCL']:
             platform.setPropertyDefaultValue('Precision', 'Double')
         self.context = mm.Context(system_mm, integrator, platform)
+
 
     def _internal_evaluate(self, positions, rvecs, do_forces):
         """Computes energy and forces

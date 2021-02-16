@@ -11,7 +11,7 @@ from conftest import assert_tol
 
 
 def test_periodic():
-    systems    = ['mof808', 'uio66', 'cau13', 'mil53', 'ppycof', 'cof5', 'mof5']
+    systems    = ['uio66', 'cau13', 'mil53', 'ppycof', 'cof5', 'mof5']
     platforms  = ['Reference']
     seed_kinds = ['covalent', 'dispersion', 'electrostatic']
 
@@ -19,7 +19,7 @@ def test_periodic():
 
     tolerance = {
             ('Reference', 'covalent'): 1e-6, # some MM3 terms have error 1e-7
-            ('Reference', 'dispersion'): 5e-3,
+            ('Reference', 'dispersion'): 1e-3,
             ('Reference', 'electrostatic'): 1e-3,
             #('CUDA', 'covalent'): 1e-3,
             #('CUDA', 'dispersion'): 1e-3,
@@ -37,14 +37,16 @@ def test_periodic():
                 configuration = Configuration(system, pars)
                 tol = tolerance[(platform, kind)]
 
-
                 # YAFF and OpenMM use a different switching function. If it is disabled,
                 # the results between both are identical up to 6 decimals
                 configuration.switch_width = 0.0 # disable switching
-                rcut = 10.0
-                configuration.rcut = rcut # request cutoff of 10 angstorm
-                supercell = configuration.determine_supercell(rcut)
-                configuration.supercell = list(supercell) # set required supercell
+                configuration.rcut = 10.0 # request cutoff of 10 angstorm
+                configuration.cell_interaction_radius = 15.0
+                #supercell = configuration.determine_supercell(rcut)
+                #configuration.supercell = list(supercell) # set required supercell
+                configuration.update_properties(
+                        configuration.write(),
+                        )
                 conversion = ExplicitConversion(pme_error_thres=1e-5)
                 seed_mm = conversion.apply(configuration, seed_kind=kind)
                 seed_yaff = configuration.create_seed(kind=kind)
