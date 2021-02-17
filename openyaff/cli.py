@@ -79,7 +79,10 @@ def convert(cwd, seed_kind, full):
 
 
     # quick single point calculation on all platforms to verify
-    platforms = ['Reference', 'CPU', 'CUDA', 'OpenCL']
+    n = mm.Platform.getNumPlatforms()
+    platforms = []
+    for i in range(n):
+        platforms.append(mm.Platform.getPlatform(i))
     u = molmod.units.angstrom
     yaff_seed = configuration.create_seed(seed_kind)
     for platform in platforms:
