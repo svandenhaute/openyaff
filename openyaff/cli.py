@@ -82,7 +82,7 @@ def convert(cwd, seed_kind, full):
     n = mm.Platform.getNumPlatforms()
     platforms = []
     for i in range(n):
-        platforms.append(mm.Platform.getPlatform(i))
+        platforms.append(mm.Platform.getPlatform(i).getName())
     u = molmod.units.angstrom
     yaff_seed = configuration.create_seed(seed_kind)
     for platform in platforms:
