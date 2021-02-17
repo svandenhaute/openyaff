@@ -108,6 +108,7 @@ def convert(cwd, seed_kind, full):
                 topology,
                 yaff_seed.system.pos / u,
                 open(cwd / 'topology.pdb', 'w+'),
+                keepIds=True,
                 )
 
 

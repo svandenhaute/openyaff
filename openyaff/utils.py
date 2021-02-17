@@ -250,6 +250,7 @@ def create_openmm_system(system):
 
 def create_openmm_topology(system):
     """Creates OpenMM Topology from yaff System instance"""
+    system.set_standard_masses()
     top = mm.app.Topology()
     chain = top.addChain()
     res = top.addResidue('res', chain)
