@@ -120,7 +120,6 @@ class ForceFieldWrapper:
                 logger.debug('{}'.format(stress))
         return stress
 
-
     def _internal_evaluate(self, positions, rvecs, do_forces):
         raise NotImplementedError
 

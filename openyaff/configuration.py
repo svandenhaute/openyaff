@@ -465,7 +465,7 @@ class Configuration:
 
         if self.periodic:
             assert self.supercell is not None
-            rvecs = self.system.cell._get_rvecs()
+            rvecs = self.system.cell._get_rvecs() / molmod.units.angstrom
             supercell = tuple(self.supercell)
             rvecs_ = np.array(supercell)[:, np.newaxis] * rvecs
             allowed_rcut = determine_rcut(rvecs_)

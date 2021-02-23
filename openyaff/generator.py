@@ -114,6 +114,7 @@ class BondHarmGenerator(BondGenerator):
     def get_force(self, periodic):
         force = mm.HarmonicBondForce()
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     def add_term_to_force(self, force, pars, indexes):
@@ -141,6 +142,7 @@ class MM3QuarticGenerator(BondGenerator):
         force.addPerBondParameter('K')
         force.addPerBondParameter('R0')
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     def add_term_to_force(self, force, pars, indexes):
@@ -189,6 +191,7 @@ class Poly4Generator(ValenceMirroredGenerator):
         force.addPerBondParameter('C4')
         force.addPerBondParameter('R0')
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     def add_term_to_force(self, force, pars, indexes):
@@ -242,6 +245,7 @@ class BendAngleHarmGenerator(BendGenerator):
     def get_force(self, periodic):
         force = mm.HarmonicAngleForce()
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     def add_term_to_force(self, force, pars, indexes):
@@ -279,6 +283,7 @@ class MM3BendGenerator(BendGenerator):
         force.addPerAngleParameter('K')
         force.addPerAngleParameter('R0')
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     def add_term_to_force(self, force, pars, indexes):
@@ -313,6 +318,7 @@ class BendCosGenerator(BendGenerator):
         force.addPerAngleParameter('A')
         force.addPerAngleParameter('PHI0')
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     def add_term_to_force(self, force, pars, indexes):
@@ -348,6 +354,7 @@ class BendCosHarmGenerator(BendGenerator):
         force.addPerAngleParameter('K')
         force.addPerAngleParameter('COS0')
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     def add_term_to_force(self, force, pars, indexes):
@@ -400,6 +407,7 @@ class OopDistGenerator(ValenceMirroredGenerator):
         force.addPerBondParameter('K')
         force.addPerBondParameter('D0')
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     @staticmethod
@@ -459,6 +467,7 @@ class SquareOopDistGenerator(ValenceMirroredGenerator):
         force.addPerBondParameter('K')
         force.addPerBondParameter('D0')
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     def add_term_to_force(self, force, pars, indexes):
@@ -516,6 +525,7 @@ class OopCosGenerator(ValenceMirroredGenerator):
         force = mm.CustomCompoundBondForce(4, energy)
         force.addPerBondParameter('A')
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     @staticmethod
@@ -603,6 +613,7 @@ class TorsionGenerator(ValenceMirroredGenerator):
         force.addPerTorsionParameter('A')
         force.addPerTorsionParameter('PHI0')
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     def add_term_to_force(self, force, pars, indexes):
@@ -659,6 +670,7 @@ class TorsionPolySixGenerator(TorsionGenerator):
         force.addPerTorsionParameter('C5')
         force.addPerTorsionParameter('C6')
         force.setUsesPeriodicBoundaryConditions(periodic)
+        force.setForceGroup(0)
         return force
 
     def add_term_to_force(self, force, pars, indexes):
@@ -890,6 +902,7 @@ class CrossGenerator(ValenceCrossMirroredGenerator):
             force.addPerBondParameter('RV0')
             force.addPerBondParameter('RV1')
             force.setUsesPeriodicBoundaryConditions(periodic)
+            force.setForceGroup(0)
             key = (i, j)
             forces[key] = force
             conversion = {
@@ -945,6 +958,7 @@ class CustomNonbondedForceGenerator:
             force.addPerParticleParameter(param)
         for param in global_params:
             force.addGlobalParameter(param)
+        force.setForceGroup(1)
         self.force = force
 
     def apply_exclusions(self, natom, scale_index, iterators):
@@ -996,8 +1010,8 @@ class CustomNonbondedForceGenerator:
             pass # doesn't matter in nonperiodic systems
 
     def set_tailcorrections(self, tail=False):
-        if self.periodic:
-            assert not tail
+        if tail:
+            assert self.periodic
         self.force.setUseLongRangeCorrection(tail)
 
     def add_particles(self, system):
@@ -1582,12 +1596,15 @@ class FixedChargeGenerator(yaff.NonbondedGenerator):
                         0 * unit.nanometer, # DISPERSION NOT COMPUTED HERE
                         0 * unit.kilocalories_per_mole,
                         )
+            nonbonded.setForceGroup(1) # real space contribution
+            nonbonded.setReciprocalSpaceForceGroup(2)
         if gaussian is not None:
             for i in range(natom):
                 gaussian.addParticle([
                     charges[i] / u_charge,
                     radii[i] / u_radius,
                     ])
+            gaussian.setForceGroup(1)
         return nonbonded, gaussian, energy_expr
 
     @staticmethod

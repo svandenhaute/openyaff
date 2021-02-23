@@ -77,37 +77,38 @@ def convert(cwd, seed_kind, full):
     conversion = load_conversion(path_yml)
     openmm_seed = conversion.apply(configuration, seed_kind)
 
-
-    # quick single point calculation on all platforms to verify
-    n = mm.Platform.getNumPlatforms()
-    platforms = []
-    for i in range(n):
-        platforms.append(mm.Platform.getPlatform(i).getName())
-    u = molmod.units.angstrom
-    yaff_seed = configuration.create_seed(seed_kind)
-    for platform in platforms:
-        logger.debug('test single point calculation on {} platform'.format(
-            platform))
-        wrapper = OpenMMForceFieldWrapper.from_seed(
-                openmm_seed,
-                platform,
-                )
-        wrapper.evaluate(
-                yaff_seed.system.pos / u,
-                yaff_seed.system.cell._get_rvecs() / u,
-                do_forces=True,
-                )
+    #if not without_singlepoint:
+    #    # quick single point calculation on all platforms to verify
+    #    n = mm.Platform.getNumPlatforms()
+    #    platforms = []
+    #    for i in range(n):
+    #        platforms.append(mm.Platform.getPlatform(i).getName())
+    #    u = molmod.units.angstrom
+    #    yaff_seed = configuration.create_seed(seed_kind)
+    #    for platform in platforms:
+    #        logger.debug('test single point calculation on {} platform'.format(
+    #            platform))
+    #        wrapper = OpenMMForceFieldWrapper.from_seed(
+    #                openmm_seed,
+    #                platform,
+    #                )
+    #        wrapper.evaluate(
+    #                yaff_seed.system.pos / u,
+    #                yaff_seed.system.cell._get_rvecs() / u,
+    #                do_forces=True,
+    #                )
     path_xml = cwd / 'system.xml'
     logger.info('saving OpenMM System object to ')
     logger.info(path_xml)
     serialize(openmm_seed.system_mm, path_xml)
 
     if full: # write additional files
+        yaff_seed = configuration.create_seed(seed_kind)
         topology = create_openmm_topology(yaff_seed.system)
         if yaff_seed.system.cell.nvec != 0: # check box vectors are included
             assert topology.getPeriodicBoxVectors() is not None
         u = molmod.units.angstrom / unit.angstrom
-        mm.app.PDBxFile.writeFile(
+        mm.app.PDBFile.writeFile(
                 topology,
                 yaff_seed.system.pos / u,
                 open(cwd / 'topology.pdb', 'w+'),
@@ -226,7 +227,11 @@ def main():
     elif args.mode == 'convert':
         seed_kind = args.interaction
         assert seed_kind in ['all', 'covalent', 'dispersion', 'electrostatic']
-        convert(cwd, seed_kind=seed_kind, full=args.full)
+        convert(
+                cwd,
+                seed_kind=seed_kind,
+                full=args.full,
+                )
         pass
     elif args.mode == 'validate':
         validate(cwd)
