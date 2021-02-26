@@ -10,7 +10,7 @@ import numpy as np
 from pathlib import Path
 
 from openyaff.utils import add_header_to_config, determine_rcut, \
-        serialize, create_openmm_topology
+        create_openmm_topology
 from openyaff import Configuration, load_conversion, load_validations, \
         ExplicitConversion, SinglePointValidation, StressValidation, \
         OpenMMForceFieldWrapper
@@ -69,38 +69,25 @@ def validate(cwd):
         validation.run(configuration, conversion)
 
 
-def convert(cwd, seed_kind, full):
+def convert(cwd, seed_kind, full, ludicrous):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
     configuration = Configuration.from_files(*input_files, path_yml)
     configuration.log_config()
     conversion = load_conversion(path_yml)
-    openmm_seed = conversion.apply(configuration, seed_kind)
 
-    #if not without_singlepoint:
-    #    # quick single point calculation on all platforms to verify
-    #    n = mm.Platform.getNumPlatforms()
-    #    platforms = []
-    #    for i in range(n):
-    #        platforms.append(mm.Platform.getPlatform(i).getName())
-    #    u = molmod.units.angstrom
-    #    yaff_seed = configuration.create_seed(seed_kind)
-    #    for platform in platforms:
-    #        logger.debug('test single point calculation on {} platform'.format(
-    #            platform))
-    #        wrapper = OpenMMForceFieldWrapper.from_seed(
-    #                openmm_seed,
-    #                platform,
-    #                )
-    #        wrapper.evaluate(
-    #                yaff_seed.system.pos / u,
-    #                yaff_seed.system.cell._get_rvecs() / u,
-    #                do_forces=True,
-    #                )
     path_xml = cwd / 'system.xml'
     logger.info('saving OpenMM System object to ')
     logger.info(path_xml)
-    serialize(openmm_seed.system_mm, path_xml)
+    if not ludicrous:
+        openmm_seed = conversion.apply(configuration, seed_kind)
+    else:
+        logger.info('converting in ludicrous mode...')
+        assert seed_kind == 'all' # only useful situation to use ludicrous
+        openmm_seed = conversion.apply_ludicrous(configuration)
+    openmm_seed.serialize(path_xml)
+
+
 
     if full: # write additional files
         yaff_seed = configuration.create_seed(seed_kind)
@@ -210,6 +197,14 @@ def main():
             default=False,
             help='write topology and state files necessary to run simulations',
             )
+    parser.add_argument(
+            '-l',
+            '--ludicrous',
+            action='store_true',
+            default=False,
+            help=('enable ludicrous mode. This is strongly recommended for'
+                 ' systems containing over one million atoms'),
+            )
     args = parser.parse_args()
 
     # enable logging
@@ -231,6 +226,7 @@ def main():
                 cwd,
                 seed_kind=seed_kind,
                 full=args.full,
+                ludicrous=args.ludicrous,
                 )
         pass
     elif args.mode == 'validate':

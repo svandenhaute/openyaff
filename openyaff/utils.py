@@ -324,26 +324,6 @@ The configuration is divided into three parts:
         f.write(content)
 
 
-def serialize(mm_object, path_xml):
-    """Uses the XmlSerializer to save OpenMM objects to file
-
-    Parameters
-    ----------
-
-    mm_object : OpenMM object
-        instance to serialize. (e.g. System, State, Topology)
-
-    path_xml : pathlib.Path
-        filepath
-
-    """
-    xml = mm.XmlSerializer.serialize(mm_object)
-    if path_xml.exists():
-        path_xml.unlink() # remove file if it exists
-    with open(path_xml, 'w') as f:
-        f.write(xml)
-
-
 def estimate_cell_derivative(positions, rvecs, energy_func, dh=1e-5,
         use_triangular_perturbation=False, evaluate_using_reduced=False):
     """Approximates the virial stress using a finite difference scheme

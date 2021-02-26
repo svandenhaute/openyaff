@@ -19,7 +19,7 @@ def test_cli_cycle(tmp_path):
     assert (tmp_path / 'config.yml').exists()
 
     # convert all, save topology and system file
-    convert(tmp_path, 'all', full=True)
+    convert(tmp_path, 'all', full=True, ludicrous=False)
     assert (tmp_path / 'topology.pdb').exists()
     assert (tmp_path / 'system.xml').exists()
 

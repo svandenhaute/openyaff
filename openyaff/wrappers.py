@@ -255,7 +255,7 @@ class OpenMMForceFieldWrapper(ForceFieldWrapper):
         if not do_forces:
             return energy_
         else:
-            forces = state.getForces()
+            forces = state.getForces(asNumpy=True)
             forces_ = forces.value_in_unit(unit.kilojoule_per_mole / unit.angstrom)
             return energy_, forces_
 
@@ -275,4 +275,4 @@ class OpenMMForceFieldWrapper(ForceFieldWrapper):
             OpenMM platform on which the computations should be performed.
 
         """
-        return cls(seed.system_mm, platform_name)
+        return cls(seed.get_system(), platform_name)
