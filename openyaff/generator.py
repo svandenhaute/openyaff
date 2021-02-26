@@ -84,9 +84,9 @@ class ValenceMirroredGenerator(yaff.ValenceGenerator):
             key = tuple(system.get_ffatype(i) for i in indexes)
             par_list = par_table.get(key, [])
             for pars in par_list:
-                vterm = self.get_vterm(pars, indexes)
-                assert vterm is not None # neccessary?
-                part_valence.add_term(vterm)
+                #vterm = self.get_vterm(pars, indexes)
+                #assert vterm is not None # neccessary?
+                #part_valence.add_term(vterm)
                 self.add_term_to_force(force, pars, indexes)
 
     def add_term_to_force(self, force, pars, indexes):
@@ -805,7 +805,8 @@ class ValenceCrossMirroredGenerator(yaff.ValenceCrossGenerator):
                     #print('=======')
                     #print(ICClass_i.__name__, ICClass_j.__name__)
                     #print(key, indexes)
-                    part_valence.add_term(VClass_ij(*args_ij))
+
+                    #part_valence.add_term(VClass_ij(*args_ij))
                     self.add_term_to_forces(forces, conversions, (i, j), indexes, K_ij, rv_i, rv_j)
             #break
         #count = 0
@@ -1079,17 +1080,17 @@ class MM3Generator(yaff.NonbondedGenerator):
         for i in range(len(onlypaulis)):
             assert(onlypaulis[0] == 0)
         # Prepare the global parameters
-        scalings = yaff.Scalings(system, scale_table[1], scale_table[2], scale_table[3], scale_table[4])
+        #scalings = yaff.Scalings(system, scale_table[1], scale_table[2], scale_table[3], scale_table[4])
 
         # Get the part. It should not exist yet.
-        part_pair = ff_args.get_part_pair(yaff.PairPotMM3)
-        if part_pair is not None:
-            raise RuntimeError('Internal inconsistency: the MM3 part should not be present yet.')
+        #part_pair = ff_args.get_part_pair(yaff.PairPotMM3)
+        #if part_pair is not None:
+        #    raise RuntimeError('Internal inconsistency: the MM3 part should not be present yet.')
 
-        pair_pot = yaff.PairPotMM3(sigmas, epsilons, onlypaulis, ff_args.rcut, ff_args.tr)
-        nlist = ff_args.get_nlist(system)
-        part_pair = yaff.ForcePartPair(system, nlist, scalings, pair_pot)
-        ff_args.parts.append(part_pair)
+        #pair_pot = yaff.PairPotMM3(sigmas, epsilons, onlypaulis, ff_args.rcut, ff_args.tr)
+        #nlist = ff_args.get_nlist(system)
+        #part_pair = yaff.ForcePartPair(system, nlist, scalings, pair_pot)
+        #ff_args.parts.append(part_pair)
 
         ####################################################################
         # OPENMM DISPERSION
@@ -1152,17 +1153,17 @@ class LJGenerator(yaff.NonbondedGenerator):
                 sigmas[i], epsilons[i] = par_list[0]
 
         # Prepare the global parameters
-        scalings = yaff.Scalings(system, scale_table[1], scale_table[2], scale_table[3], scale_table[4])
+        #scalings = yaff.Scalings(system, scale_table[1], scale_table[2], scale_table[3], scale_table[4])
 
-        # Get the part. It should not exist yet.
-        part_pair = ff_args.get_part_pair(yaff.PairPotLJ)
-        if part_pair is not None:
-            raise RuntimeError('Internal inconsistency: the LJ part should not be present yet.')
+        ## Get the part. It should not exist yet.
+        #part_pair = ff_args.get_part_pair(yaff.PairPotLJ)
+        #if part_pair is not None:
+        #    raise RuntimeError('Internal inconsistency: the LJ part should not be present yet.')
 
-        pair_pot = yaff.PairPotLJ(sigmas, epsilons, ff_args.rcut, ff_args.tr)
-        nlist = ff_args.get_nlist(system)
-        part_pair = yaff.ForcePartPair(system, nlist, scalings, pair_pot)
-        ff_args.parts.append(part_pair)
+        #pair_pot = yaff.PairPotLJ(sigmas, epsilons, ff_args.rcut, ff_args.tr)
+        #nlist = ff_args.get_nlist(system)
+        #part_pair = yaff.ForcePartPair(system, nlist, scalings, pair_pot)
+        #ff_args.parts.append(part_pair)
 
         energy = '4.0 * epsilon * ((sigma / r)^12 - (sigma / r)^6); '
         energy += 'epsilon=sqrt(EPSILON1 * EPSILON2); sigma=(SIGMA1 + SIGMA2) / 2;'
@@ -1243,17 +1244,17 @@ class LJCrossGenerator(yaff.NonbondedGenerator):
                 epsilons[i, j] = pars_list[0][1]
 
         # Prepare the global parameters
-        scalings = yaff.Scalings(system, scale_table[1], scale_table[2], scale_table[3], scale_table[4])
+        #scalings = yaff.Scalings(system, scale_table[1], scale_table[2], scale_table[3], scale_table[4])
 
-        # Get the part. It should not exist yet.
-        part_pair = ff_args.get_part_pair(yaff.PairPotLJCross)
-        if part_pair is not None:
-            raise RuntimeError('Internal inconsistency: the LJCross part should not be present yet.')
+        ## Get the part. It should not exist yet.
+        #part_pair = ff_args.get_part_pair(yaff.PairPotLJCross)
+        #if part_pair is not None:
+        #    raise RuntimeError('Internal inconsistency: the LJCross part should not be present yet.')
 
-        pair_pot = yaff.PairPotLJCross(system.ffatype_ids, epsilons, sigmas, ff_args.rcut, ff_args.tr)
-        nlist = ff_args.get_nlist(system)
-        part_pair = yaff.ForcePartPair(system, nlist, scalings, pair_pot)
-        ff_args.parts.append(part_pair)
+        #pair_pot = yaff.PairPotLJCross(system.ffatype_ids, epsilons, sigmas, ff_args.rcut, ff_args.tr)
+        #nlist = ff_args.get_nlist(system)
+        #part_pair = yaff.ForcePartPair(system, nlist, scalings, pair_pot)
+        #ff_args.parts.append(part_pair)
 
 
         # create dictionary with list of atom indices per ffatype
@@ -1419,11 +1420,11 @@ class FixedChargeGenerator(yaff.NonbondedGenerator):
                 system.charges[i1] -= charge_transfer
 
         # prepare other parameters
-        scalings = yaff.Scalings(system, scale_table[1], scale_table[2], scale_table[3], scale_table[4])
+        #scalings = yaff.Scalings(system, scale_table[1], scale_table[2], scale_table[3], scale_table[4])
 
-        # Setup the electrostatic pars
-        assert(dielectric == 1.0)
-        ff_args.add_electrostatic_parts(system, scalings, dielectric)
+        ## Setup the electrostatic pars
+        #assert(dielectric == 1.0)
+        #ff_args.add_electrostatic_parts(system, scalings, dielectric)
 
         ##############################################################
         # OPENMM ELECTROSTATICS
