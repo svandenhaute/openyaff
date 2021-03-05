@@ -1,6 +1,11 @@
+import molmod
 import logging
 import simtk.openmm as mm
+import simtk.openmm.app
+import simtk.unit as unit
 from lxml import etree
+
+from openyaff.utils import create_openmm_topology
 
 
 logger = logging.getLogger(__name__) # logging per module
@@ -34,6 +39,23 @@ class YaffSeed:
         self.system = system
         self.parameters = parameters
         self.ff_args = ff_args
+
+    def save_topology(self, path_pdb=None):
+        """Saves topology of YAFF system and its positions/box vectors"""
+        topology = create_openmm_topology(self.system)
+        if self.system.cell.nvec != 0: # check box vectors are included
+            assert topology.getPeriodicBoxVectors() is not None
+        if path_pdb is not None:
+            if path_pdb.exists():
+                path_pdb.unlink()
+            u = molmod.units.angstrom / unit.angstrom
+            mm.app.PDBFile.writeFile(
+                    topology,
+                    self.system.pos / u,
+                    open(path_pdb, 'w+'),
+                    keepIds=True,
+                    )
+        return topology
 
 
 class OpenMMSeed:

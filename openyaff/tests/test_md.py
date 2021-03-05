@@ -21,7 +21,7 @@ def test_short_simulation(tmp_path):
 
     # topology
     yaff_seed = configuration.create_seed('all')
-    topology = create_openmm_topology(yaff_seed.system)
+    topology = yaff_seed.save_topology()
 
     # initial state
     u = molmod.units.nanometer / unit.nanometer

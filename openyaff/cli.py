@@ -88,24 +88,14 @@ def convert(cwd, seed_kind, full, ludicrous):
     openmm_seed.serialize(path_xml)
 
     if full: # write additional files
-        yaff_seed = configuration.create_seed(seed_kind)
-        topology = create_openmm_topology(yaff_seed.system)
-        if yaff_seed.system.cell.nvec != 0: # check box vectors are included
-            assert topology.getPeriodicBoxVectors() is not None
-        u = molmod.units.angstrom / unit.angstrom
-        mm.app.PDBFile.writeFile(
-                topology,
-                yaff_seed.system.pos / u,
-                open(cwd / 'topology.pdb', 'w+'),
-                keepIds=True,
-                )
+        seed = configuration.create_seed()
+        seed.save_topology(cwd / 'topology.pdb')
 
 
 def save(cwd, file_formats):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
     configuration = Configuration.from_files(*input_files, path_yml)
-
 
     logger.info('saving system with current supercell configuration in the'
             ' following formats:')
@@ -120,16 +110,7 @@ def save(cwd, file_formats):
         if (file_format == 'xyz') or (file_format == 'h5'):
             seed.system.to_file(str(path_file))
         elif file_format == 'pdb':
-            topology = create_openmm_topology(seed.system)
-            if seed.system.cell.nvec != 0: # check box vectors are included
-                assert topology.getPeriodicBoxVectors() is not None
-            u = molmod.units.angstrom / unit.angstrom
-            mm.app.PDBFile.writeFile(
-                    topology,
-                    seed.system.pos / u,
-                    open(path_file, 'w+'),
-                    keepIds=True,
-                    )
+            seed.save_topology(cwd / 'topology.pdb')
 
 
 def initialize(cwd):

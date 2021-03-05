@@ -222,6 +222,42 @@ def do_gram_schmidt_reduction(rvecs):
     return reduced
 
 
+def wrap_coordinates(positions, rvecs, rectangular=False):
+    """Displaces particle positions in-place to the first periodic box
+
+     If the periodic box is triclinic, it is possible to wrap the coordinates
+     in the equivalent rectangular box representation using the rectangular
+     keyword argument. See e.g. the GROMACS documentation for more information
+     on the equivalence between triclinic and rectangular boxes.
+
+    Parameters
+    ----------
+
+    positions : array_like
+        (natoms, 3) array containing atomic positions
+
+    rvecs : array_like
+        (3, 3) array with box vectors as rows
+
+    rectangular : bool
+        whether to wrap coordinates in the actual cell or in its rectangular
+        representation
+
+    """
+    if rectangular: # only available if rvecs is in reduced form
+        assert is_lower_triangular(rvecs)
+        assert is_reduced(rvecs)
+        # translate particles to first rectangular(!) periodic box
+        for i in range(positions.shape[0]):
+            positions[i, :] -= rvecs[2, :] * np.floor(positions[i, 2] / rvecs[2, 2])
+            positions[i, :] -= rvecs[1, :] * np.floor(positions[i, 1] / rvecs[1, 1])
+            positions[i, :] -= rvecs[0, :] * np.floor(positions[i, 0] / rvecs[0, 0])
+    else:
+        frac  = np.dot(positions, np.linalg.inv(rvecs)) # fractional coordinates
+        frac -= np.floor(frac) # translate particles to first periodic box
+        positions[:] = np.dot(frac, rvecs)
+
+
 def yaff_generate(seed):
     """Generates a yaff.ForceField instance based on a seed
 
@@ -252,8 +288,15 @@ def create_openmm_system(system):
     system.set_standard_masses()
     system_mm = mm.System()
     if system.cell.nvec == 3:
-        rvecs = system.cell._get_rvecs() / molmod.units.angstrom / 10.0 * unit.nanometer
-        system_mm.setDefaultPeriodicBoxVectors(*rvecs)
+        rvecs = system.cell._get_rvecs()
+        assert is_reduced(rvecs)
+        assert is_lower_triangular(rvecs)
+        u = molmod.units.nanometer / unit.nanometer
+        system_mm.setDefaultPeriodicBoxVectors(
+                rvecs[0, :] / u,
+                rvecs[1, :] / u,
+                rvecs[2, :] / u,
+                )
     for i in range(system.pos.shape[0]):
         system_mm.addParticle(system.masses[i] / molmod.units.amu * unit.dalton)
     return system_mm
@@ -282,11 +325,14 @@ def create_openmm_topology(system):
                 ))
     for bond in system.bonds:
         top.addBond(atoms[bond[0]], atoms[bond[1]])
+    rvecs = system.cell._get_rvecs()
+    assert is_reduced(rvecs)
+    assert is_lower_triangular(rvecs)
     u = molmod.units.nanometer # should be of type 'float', not 'unit'
     top.setPeriodicBoxVectors([
-            system.cell._get_rvecs()[0] / u,
-            system.cell._get_rvecs()[1] / u,
-            system.cell._get_rvecs()[2] / u,
+            rvecs[0, :] / u,
+            rvecs[1, :] / u,
+            rvecs[2, :] / u,
             ])
     return top
 

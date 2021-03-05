@@ -1,10 +1,13 @@
+import pytest
 import molmod
 import numpy as np
+import simtk.unit as unit
 
 from openyaff.utils import transform_lower_triangular, is_lower_triangular, \
         reduce_box_vectors, is_reduced, transform_symmetric, \
         do_gram_schmidt_reduction, compute_lengths_angles, \
-        estimate_cell_derivative
+        estimate_cell_derivative, wrap_coordinates, create_openmm_system, \
+        create_openmm_topology
 from openyaff.configuration import Configuration
 from openyaff.wrappers import YaffForceFieldWrapper
 
@@ -179,3 +182,113 @@ def test_estimate_virial_stress():
         vtens_numerical_r = rvecs.T @ dUdh_r
         assert np.allclose(vtens_numerical_r, vtens_numerical_r.T, atol=1e-5)
         assert np.allclose(vtens_numerical_r, vtens_numerical, atol=1e-5)
+
+
+def test_wrap_coordinates():
+    for name in ['cau13', 'uio66', 'ppycof', 'mof5', 'mil53', 'cof5']:
+        ff = get_system(name, return_forcefield=True)
+        positions = ff.system.pos.copy()
+        rvecs  = ff.system.cell._get_rvecs().copy()
+        rvecs_ = ff.system.cell._get_rvecs().copy()
+        ff.update_pos(positions)
+        ff.update_rvecs(rvecs)
+        e = ff.compute()
+
+        # make random periodic displacements
+        for i in range(100):
+            coefficients = np.random.randint(0, high=3, size=(3, 1))
+            atom = np.random.randint(0, high=ff.system.natom)
+            positions[atom, :] += np.sum(coefficients * rvecs, axis=0)
+        ff.update_pos(positions)
+        ff.update_rvecs(rvecs)
+        e0 = ff.compute()
+        assert np.allclose(e, e0)
+
+        wrap_coordinates(positions, rvecs, rectangular=False)
+        frac = np.dot(positions, np.linalg.inv(rvecs)) # fractional coordinates
+        assert np.all(frac >= 0)
+        assert np.all(frac <= 1)
+        assert np.allclose(rvecs, rvecs_) # rvecs should not change
+        ff.update_pos(positions)
+        ff.update_rvecs(rvecs)
+        e1 = ff.compute()
+        assert np.allclose(e0, e1)
+
+        with pytest.raises(AssertionError):
+            wrap_coordinates(positions, rvecs, rectangular=True)
+
+        # transform rvecs
+        transform_lower_triangular(positions, rvecs, reorder=False)
+        reduce_box_vectors(rvecs)
+        wrap_coordinates(positions, rvecs, rectangular=True)
+        for i in range(positions.shape[0]):
+            assert np.all(np.abs(positions[i, :]) < np.diag(rvecs))
+        ff.update_pos(positions)
+        ff.update_rvecs(rvecs)
+        e2 = ff.compute()
+        assert np.allclose(e0, e2)
+
+        # reorder rvecs
+        transform_lower_triangular(positions, rvecs, reorder=True)
+        reduce_box_vectors(rvecs)
+        wrap_coordinates(positions, rvecs, rectangular=True)
+        for i in range(positions.shape[0]):
+            assert np.all(np.abs(positions[i, :]) < np.diag(rvecs))
+        ff.update_pos(positions)
+        ff.update_rvecs(rvecs)
+        e3 = ff.compute()
+        assert np.allclose(e0, e3)
+
+
+def test_create_openmm_system():
+    system, _ = get_system('cau13')
+    with pytest.raises(AssertionError):
+        create_openmm_system(system)
+
+    rvecs = system.cell._get_rvecs().copy()
+    transform_lower_triangular(system.pos, rvecs, reorder=True)
+    reduce_box_vectors(rvecs)
+
+    system.cell.update_rvecs(rvecs)
+    system_mm = create_openmm_system(system)
+    # verify box vectors are correct
+    a, b, c = system_mm.getDefaultPeriodicBoxVectors()
+    assert np.allclose(
+            a.value_in_unit(unit.angstrom),
+            rvecs[0, :] / molmod.units.angstrom,
+            )
+    assert np.allclose(
+            b.value_in_unit(unit.angstrom),
+            rvecs[1, :] / molmod.units.angstrom,
+            )
+    assert np.allclose(
+            c.value_in_unit(unit.angstrom),
+            rvecs[2, :] / molmod.units.angstrom,
+            )
+
+
+def test_create_openmm_topology():
+    system, _ = get_system('cau13')
+    with pytest.raises(AssertionError):
+        create_openmm_topology(system)
+
+    rvecs = system.cell._get_rvecs().copy()
+    transform_lower_triangular(system.pos, rvecs, reorder=True)
+    reduce_box_vectors(rvecs)
+
+    system.cell.update_rvecs(rvecs)
+    topology = create_openmm_topology(system)
+    # verify box vectors are correct
+    a, b, c = topology.getPeriodicBoxVectors()
+    assert np.allclose(
+            a.value_in_unit(unit.angstrom),
+            rvecs[0, :] / molmod.units.angstrom,
+            )
+    assert np.allclose(
+            b.value_in_unit(unit.angstrom),
+            rvecs[1, :] / molmod.units.angstrom,
+            )
+    assert np.allclose(
+            c.value_in_unit(unit.angstrom),
+            rvecs[2, :] / molmod.units.angstrom,
+            )

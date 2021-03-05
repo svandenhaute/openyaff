@@ -3,12 +3,60 @@ import pytest
 import numpy as np
 from lxml import etree
 
+import simtk.openmm as mm
+import simtk.openmm.app
+import simtk.unit as unit
+
 from openyaff import Configuration, ExplicitConversion, \
         OpenMMForceFieldWrapper, YaffForceFieldWrapper
 from openyaff.utils import reduce_box_vectors
 
 from systems import get_system
 from conftest import assert_tol
+
+
+def test_save_load_pdb(tmp_path):
+    system, pars = get_system('mil53')
+    configuration = Configuration(system, pars)
+
+    # YAFF and OpenMM use a different switching function. If it is disabled,
+    # the results between both are identical up to 6 decimals
+    configuration.switch_width = 0.0 # disable switching
+    configuration.rcut = 10.0 # request cutoff of 10 angstorm
+    configuration.cell_interaction_radius = 11.0
+    configuration.update_properties(configuration.write())
+
+    conversion = ExplicitConversion(pme_error_thres=5e-4)
+    seed_mm = conversion.apply(configuration, seed_kind='all')
+    seed_yaff = configuration.create_seed(kind='all')
+
+    wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
+    wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
+    assert wrapper_yaff.periodic # system should not be considered periodic
+    assert wrapper_mm.periodic # system should not be considered periodic
+
+    positions = seed_yaff.system.pos.copy() / molmod.units.angstrom
+    rvecs = seed_yaff.system.cell._get_rvecs().copy() / molmod.units.angstrom
+
+    e0, f0 = wrapper_mm.evaluate(positions, rvecs, do_forces=True)
+    e1, f1 = wrapper_yaff.evaluate(positions, rvecs, do_forces=True)
+    assert np.allclose(e0, e1, rtol=1e-3)
+
+    path_pdb = tmp_path / 'top.pdb'
+    seed_yaff.save_topology(path_pdb) # stores current positions and box vectors
+    pdb = mm.app.PDBFile(str(path_pdb))
+    positions = pdb.getPositions(asNumpy=True).value_in_unit(unit.angstrom)
+    a, b, c  = pdb.getTopology().getPeriodicBoxVectors()
+    rvecs = np.array([
+        a.value_in_unit(unit.angstrom),
+        b.value_in_unit(unit.angstrom),
+        c.value_in_unit(unit.angstrom)])
+
+    e2, f2 = wrapper_mm.evaluate(positions, rvecs, do_forces=True)
+    e3, f3 = wrapper_yaff.evaluate(positions, rvecs, do_forces=True)
+    assert np.allclose(e2, e3, rtol=1e-3)
+    assert np.allclose(e1, e3, rtol=1e-4) # rounding errors during saving pdb
+    assert np.allclose(e0, e2, rtol=1e-4)
 
 
 def test_periodic():
@@ -45,7 +93,7 @@ def test_periodic():
                 configuration.cell_interaction_radius = 15.0
                 configuration.update_properties(configuration.write())
 
-                conversion = ExplicitConversion(pme_error_thres=1e-5)
+                conversion = ExplicitConversion(pme_error_thres=5e-4)
                 seed_mm = conversion.apply(configuration, seed_kind=kind)
                 seed_yaff = configuration.create_seed(kind=kind)
 
