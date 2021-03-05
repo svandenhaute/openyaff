@@ -87,8 +87,6 @@ def convert(cwd, seed_kind, full, ludicrous):
         openmm_seed = conversion.apply_ludicrous(configuration)
     openmm_seed.serialize(path_xml)
 
-
-
     if full: # write additional files
         yaff_seed = configuration.create_seed(seed_kind)
         topology = create_openmm_topology(yaff_seed.system)
@@ -103,7 +101,38 @@ def convert(cwd, seed_kind, full, ludicrous):
                 )
 
 
-def initialize(cwd, save_xyz=False):
+def save(cwd, file_formats):
+    input_files = get_input_files(cwd, ['.chk', '.txt'])
+    path_yml = cwd / 'config.yml'
+    configuration = Configuration.from_files(*input_files, path_yml)
+
+
+    logger.info('saving system with current supercell configuration in the'
+            ' following formats:')
+    for file_format in file_formats:
+        logger.info('\t\t' + file_format)
+    logger.info('cell vectors are stored in reduced form')
+    seed = configuration.create_seed()
+    for file_format in file_formats:
+        path_file = cwd / ('configured_system.' + file_format)
+        if path_file.exists():
+            path_file.unlink()
+        if (file_format == 'xyz') or (file_format == 'h5'):
+            seed.system.to_file(str(path_file))
+        elif file_format == 'pdb':
+            topology = create_openmm_topology(seed.system)
+            if seed.system.cell.nvec != 0: # check box vectors are included
+                assert topology.getPeriodicBoxVectors() is not None
+            u = molmod.units.angstrom / unit.angstrom
+            mm.app.PDBFile.writeFile(
+                    topology,
+                    seed.system.pos / u,
+                    open(path_file, 'w+'),
+                    keepIds=True,
+                    )
+
+
+def initialize(cwd):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
     path_xyz = cwd / 'configured_system.xyz'
@@ -143,19 +172,6 @@ def initialize(cwd, save_xyz=False):
     for default in default_classes:
         default().annotate(path_yml)
 
-    if save_xyz:
-        if path_xyz.exists():
-            path_xyz.unlink()
-        if path_h5.exists():
-            path_h5.unlink()
-        logger.info('saving system with current supercell configuration to'
-                ' .xyz and .h5. Cell vectors are stored in reduced form;')
-        logger.info(str(path_xyz))
-        seed = configuration.create_seed()
-        seed.system.to_file(str(path_xyz))
-        logger.info(str(path_h5))
-        seed.system.to_file(str(path_h5))
-
 
 def main():
     print('')
@@ -166,7 +182,7 @@ def main():
     parser.add_argument(
             'mode',
             action='store',
-            choices=['test', 'initialize', 'convert', 'validate'],
+            choices=['test', 'initialize', 'save', 'convert', 'validate'],
             default='test',
             help='specifies mode of operation',
             )
@@ -179,18 +195,29 @@ def main():
             help='type of interactions to consider',
             )
     parser.add_argument(
-            '-s',
-            '--save-xyz',
-            help='save system with current supercell configuration to .xyz',
-            action='store_true',
-            default=False,
-            )
-    parser.add_argument(
             '-d',
             '--debug',
             action='store_true',
             default=False,
             help='enables debug mode',
+            )
+    parser.add_argument(
+            '--xyz',
+            action='store_true',
+            default=False,
+            help='save configured system in XYZ file format',
+            )
+    parser.add_argument(
+            '--h5',
+            action='store_true',
+            default=False,
+            help='save configured system in HDF5 file format',
+            )
+    parser.add_argument(
+            '--pdb',
+            action='store_true',
+            default=False,
+            help='save configured system in PDB file format',
             )
     parser.add_argument(
             '-f',
@@ -220,7 +247,16 @@ def main():
     if args.mode == 'test':
         test()
     elif args.mode == 'initialize':
-        initialize(cwd, args.save_xyz)
+        initialize(cwd)
+    elif args.mode == 'save':
+        file_formats = []
+        if args.xyz:
+            file_formats.append('xyz')
+        if args.h5:
+            file_formats.append('h5')
+        if args.pdb:
+            file_formats.append('pdb')
+        save(cwd, file_formats)
     elif args.mode == 'convert':
         seed_kind = args.interaction
         assert seed_kind in ['all', 'covalent', 'dispersion', 'electrostatic']

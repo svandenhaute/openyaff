@@ -159,7 +159,16 @@ def reduce_box_vectors(rvecs):
 
 
 def compute_lengths_angles(rvecs, degree=False):
-    """Computes and returns the box vector lengths and angles"""
+    """Computes and returns the box vector lengths and angles
+
+    Parameters
+    ----------
+
+    rvecs : array_like
+        (3, 3) array with box vectors as rows. These need not be in lower
+        diagonal form.
+
+    """
     lengths = np.linalg.norm(rvecs, axis=1)
     cosalpha = np.sum(rvecs[1, :] * rvecs[2, :]) / (lengths[1] * lengths[2])
     cosbeta  = np.sum(rvecs[0, :] * rvecs[2, :]) / (lengths[0] * lengths[2])
