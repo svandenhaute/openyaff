@@ -12,10 +12,10 @@ def test_cli_cycle(tmp_path):
     with open(path_pars, 'w+') as f:
         f.write(pars)
 
-    # initialize, write reduced system; verify files are created
-    initialize(tmp_path, save_reduced=True)
-    assert (tmp_path / 'reduced.xyz').exists()
-    assert (tmp_path / 'reduced.h5').exists()
+    # initialize, write configured system; verify files are created
+    initialize(tmp_path, save_xyz=True)
+    assert (tmp_path / 'configured_system.xyz').exists()
+    assert (tmp_path / 'configured_system.h5').exists()
     assert (tmp_path / 'config.yml').exists()
 
     # convert all, save topology and system file

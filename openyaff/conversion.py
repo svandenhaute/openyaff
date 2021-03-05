@@ -104,7 +104,7 @@ class ExplicitConversion(Conversion):
             'pme_error_thres',
             ]
 
-    def __init__(self, pme_error_thres=1e-5):
+    def __init__(self, pme_error_thres=5e-4):
         self.pme_error_thres = pme_error_thres
 
     def check_compatibility(self, configuration):

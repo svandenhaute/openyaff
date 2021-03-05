@@ -103,11 +103,11 @@ def convert(cwd, seed_kind, full, ludicrous):
                 )
 
 
-def initialize(cwd, save_reduced=False):
+def initialize(cwd, save_xyz=False):
     input_files = get_input_files(cwd, ['.chk', '.txt'])
     path_yml = cwd / 'config.yml'
-    path_xyz = cwd / 'reduced.xyz'
-    path_h5 = cwd / 'reduced.h5'
+    path_xyz = cwd / 'configured_system.xyz'
+    path_h5 = cwd / 'configured_system.h5'
     logger.info('found the following input files:')
     for file in input_files:
         logger.info(str(file.name))
@@ -143,16 +143,18 @@ def initialize(cwd, save_reduced=False):
     for default in default_classes:
         default().annotate(path_yml)
 
-    if save_reduced:
+    if save_xyz:
         if path_xyz.exists():
             path_xyz.unlink()
         if path_h5.exists():
             path_h5.unlink()
-        logger.info('saving YAFF system with reduced box vectors to files')
+        logger.info('saving system with current supercell configuration to'
+                ' .xyz and .h5. Cell vectors are stored in reduced form;')
         logger.info(str(path_xyz))
-        configuration.system.to_file(str(path_xyz))
+        seed = configuration.create_seed()
+        seed.system.to_file(str(path_xyz))
         logger.info(str(path_h5))
-        configuration.system.to_file(str(path_h5))
+        seed.system.to_file(str(path_h5))
 
 
 def main():
@@ -178,8 +180,8 @@ def main():
             )
     parser.add_argument(
             '-s',
-            '--save-reduced',
-            help='save YAFF system with reduced box vectors',
+            '--save-xyz',
+            help='save system with current supercell configuration to .xyz',
             action='store_true',
             default=False,
             )
@@ -218,7 +220,7 @@ def main():
     if args.mode == 'test':
         test()
     elif args.mode == 'initialize':
-        initialize(cwd, args.save_reduced)
+        initialize(cwd, args.save_xyz)
     elif args.mode == 'convert':
         seed_kind = args.interaction
         assert seed_kind in ['all', 'covalent', 'dispersion', 'electrostatic']

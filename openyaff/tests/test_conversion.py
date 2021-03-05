@@ -11,45 +11,6 @@ from systems import get_system
 from conftest import assert_tol
 
 
-def test_serialize_aggregate_nonperiodic(tmp_path):
-    system, pars = get_system('alanine')
-    configuration = Configuration(system, pars)
-    conversion = ExplicitConversion()
-    seed      = conversion.apply(configuration)
-    wrapper   = OpenMMForceFieldWrapper.from_seed(seed, 'Reference')
-    seed_l    = conversion.apply_ludicrous(configuration)
-    wrapper_l = OpenMMForceFieldWrapper.from_seed(seed_l, 'Reference')
-
-    positions = system.pos / molmod.units.angstrom
-    energy, forces = wrapper.evaluate(positions)
-    energy_l, forces_l = wrapper_l.evaluate(positions)
-    assert_tol(energy, energy_l, 1e-5)
-    assert_tol(forces, forces_l, 1e-5)
-
-
-def test_serialize_aggregate_nonperiodic(tmp_path):
-    system, pars = get_system('cau13')
-    configuration = Configuration(system, pars)
-    configuration.switch_width = 0.0 # disable switching
-    configuration.rcut = 10.0 # request cutoff of 10 angstorm
-    configuration.cell_interaction_radius = 15.0
-    configuration.update_properties(configuration.write())
-    yaff_seed = configuration.create_seed('covalent')
-    positions = yaff_seed.system.pos / molmod.units.angstrom
-    rvecs = yaff_seed.system.cell._get_rvecs() / molmod.units.angstrom
-
-    conversion = ExplicitConversion()
-    seed      = conversion.apply(configuration)
-    wrapper   = OpenMMForceFieldWrapper.from_seed(seed, 'Reference')
-    seed_l    = conversion.apply_ludicrous(configuration)
-    wrapper_l = OpenMMForceFieldWrapper.from_seed(seed_l, 'Reference')
-
-    energy, forces = wrapper.evaluate(positions, rvecs)
-    energy_l, forces_l = wrapper_l.evaluate(positions, rvecs)
-    assert_tol(energy, energy_l, 1e-3)
-    assert_tol(forces, forces_l, 1e-3)
-
-
 def test_periodic():
     systems    = ['uio66', 'cau13', 'mil53', 'ppycof', 'cof5', 'mof5']
     platforms  = ['Reference']
@@ -113,6 +74,45 @@ def test_periodic():
                             )
                     assert_tol(energy, energy_mm, tol)
                     assert_tol(forces, forces_mm, 10 * tol)
+
+
+def test_serialize_aggregate_nonperiodic(tmp_path):
+    system, pars = get_system('alanine')
+    configuration = Configuration(system, pars)
+    conversion = ExplicitConversion()
+    seed      = conversion.apply(configuration)
+    wrapper   = OpenMMForceFieldWrapper.from_seed(seed, 'Reference')
+    seed_l    = conversion.apply_ludicrous(configuration)
+    wrapper_l = OpenMMForceFieldWrapper.from_seed(seed_l, 'Reference')
+
+    positions = system.pos / molmod.units.angstrom
+    energy, forces = wrapper.evaluate(positions)
+    energy_l, forces_l = wrapper_l.evaluate(positions)
+    assert_tol(energy, energy_l, 1e-5)
+    assert_tol(forces, forces_l, 1e-5)
+
+
+def test_serialize_aggregate_nonperiodic(tmp_path):
+    system, pars = get_system('cau13')
+    configuration = Configuration(system, pars)
+    configuration.switch_width = 0.0 # disable switching
+    configuration.rcut = 10.0 # request cutoff of 10 angstorm
+    configuration.cell_interaction_radius = 15.0
+    configuration.update_properties(configuration.write())
+    yaff_seed = configuration.create_seed('covalent')
+    positions = yaff_seed.system.pos / molmod.units.angstrom
+    rvecs = yaff_seed.system.cell._get_rvecs() / molmod.units.angstrom
+
+    conversion = ExplicitConversion()
+    seed      = conversion.apply(configuration)
+    wrapper   = OpenMMForceFieldWrapper.from_seed(seed, 'Reference')
+    seed_l    = conversion.apply_ludicrous(configuration)
+    wrapper_l = OpenMMForceFieldWrapper.from_seed(seed_l, 'Reference')
+
+    energy, forces = wrapper.evaluate(positions, rvecs)
+    energy_l, forces_l = wrapper_l.evaluate(positions, rvecs)
+    assert_tol(energy, energy_l, 1e-3)
+    assert_tol(forces, forces_l, 1e-3)
 
 
 def test_nonperiodic():
@@ -210,7 +210,6 @@ def test_write_annotate(tmp_path):
         content = f.read()
     assert content == """conversion:
   kind: explicit
-  pme_error_thres: 1.0e-05
+  pme_error_thres: 0.0005
 """
     ExplicitConversion.annotate(path_config)
-

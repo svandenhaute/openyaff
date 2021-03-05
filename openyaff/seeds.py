@@ -1,5 +1,10 @@
+import logging
 import simtk.openmm as mm
 from lxml import etree
+
+
+logger = logging.getLogger(__name__) # logging per module
+
 
 class YaffSeed:
     """Simple datastructure to represent a seed for YAFF force fields

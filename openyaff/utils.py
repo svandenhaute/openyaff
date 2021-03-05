@@ -41,8 +41,8 @@ def is_reduced(rvecs):
 
     """
     return (rvecs[0, 0] > abs(2 * rvecs[1, 0]) and # b mostly along y axis
-            rvecs[0, 0] > abs(2 * rvecs[2, 0]) and # z mostly along z axis
-            rvecs[1, 1] > abs(2 * rvecs[2, 1]) and # z mostly along z axis
+            rvecs[0, 0] > abs(2 * rvecs[2, 0]) and # c mostly along z axis
+            rvecs[1, 1] > abs(2 * rvecs[2, 1]) and # c mostly along z axis
             is_lower_triangular(rvecs))
 
 
@@ -121,8 +121,10 @@ def determine_rcut(rvecs):
 
     """
     rvecs_ = rvecs.copy()
-    if not is_reduced(rvecs_):
-        reduce_box_vectors(rvecs_)
+    # reorder necessary for some systems (e.g. cau13); WHY?
+    transform_lower_triangular(np.zeros((1, 3)), rvecs_, reorder=True)
+    reduce_box_vectors(rvecs_)
+    assert is_reduced(rvecs_)
     return min([
             rvecs_[0, 0],
             rvecs_[1, 1],
