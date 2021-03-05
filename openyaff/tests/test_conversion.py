@@ -258,6 +258,6 @@ def test_write_annotate(tmp_path):
         content = f.read()
     assert content == """conversion:
   kind: explicit
-  pme_error_thres: 0.0005
+  pme_error_thres: 1.0e-05
 """
     ExplicitConversion.annotate(path_config)

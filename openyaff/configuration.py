@@ -8,7 +8,7 @@ from datetime import datetime
 
 from openyaff.utils import determine_rcut, transform_lower_triangular, \
         compute_lengths_angles, is_lower_triangular, is_reduced, \
-        reduce_box_vectors, log_header
+        reduce_box_vectors, log_header, wrap_coordinates
 from openyaff.seeds import YaffSeed
 from openyaff.generator import COVALENT_PREFIXES, DISPERSION_PREFIXES, \
         ELECTROSTATIC_PREFIXES
@@ -155,8 +155,9 @@ class Configuration:
             system = self.system.supercell(*self.supercell) # possibly (1, 1, 1)
             # apply reduction
             rvecs = system.cell._get_rvecs().copy()
-            transform_lower_triangular(np.zeros((1, 3)), rvecs, reorder=True)
+            transform_lower_triangular(system.pos, rvecs, reorder=True)
             reduce_box_vectors(rvecs)
+            wrap_coordinates(system.pos, rvecs)
             system.cell.update_rvecs(rvecs)
         else:
             system = self.system

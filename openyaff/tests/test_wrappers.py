@@ -1,12 +1,56 @@
+import pytest
 import numpy as np
 import molmod
 import simtk.openmm.app as app
 
 from openyaff import YaffForceFieldWrapper, Configuration, ExplicitConversion, \
         OpenMMForceFieldWrapper
-from openyaff.utils import estimate_cell_derivative, transform_symmetric
+from openyaff.utils import estimate_cell_derivative, transform_symmetric, \
+        wrap_coordinates, compute_lengths_angles, transform_lower_triangular, \
+        reduce_box_vectors
 
 from systems import get_system
+
+
+def test_wrapper_openmm_mic():
+    system, pars = get_system('mil53')
+    configuration = Configuration(system, pars)
+    kind = 'all'
+
+    # YAFF and OpenMM use a different switching function. If it is disabled,
+    # the results between both are identical up to 6 decimals
+    configuration.switch_width = 0.0 # disable switching
+    configuration.rcut = 10.0 # request cutoff of 10 angstorm
+    configuration.cell_interaction_radius = 10.0
+    configuration.supercell = [2, 3, 5]
+    configuration.update_properties(configuration.write())
+    conversion = ExplicitConversion(pme_error_thres=1e-5)
+    seed_mm = conversion.apply(configuration, seed_kind=kind)
+    wrapper = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
+
+
+    u = molmod.units.angstrom
+    seed_yaff = configuration.create_seed(kind=kind)
+    positions = seed_yaff.system.pos.copy() / u
+    rvecs = seed_yaff.system.cell._get_rvecs().copy() / u
+    e, _ = wrapper.evaluate(positions, rvecs, do_forces=True)
+
+    # make random periodic displacements
+    for i in range(5):
+        coefficients = np.random.randint(-3, high=3, size=(3, 1))
+        atom = np.random.randint(0, high=seed_yaff.system.natom, size=(10,))
+        positions[atom, :] += np.sum(coefficients * rvecs, axis=0)
+        e_ = wrapper.evaluate(positions, rvecs, do_forces=False)
+        assert np.allclose(e, e_)
+
+    # make random periodic displacements and rewrap coordinates
+    for i in range(5):
+        coefficients = np.random.randint(-3, high=3, size=(3, 1))
+        atom = np.random.randint(0, high=seed_yaff.system.natom, size=(10,))
+        positions[atom, :] += np.sum(coefficients * rvecs, axis=0)
+        wrap_coordinates(positions, rvecs, rectangular=True)
+        e_ = wrapper.evaluate(positions, rvecs, do_forces=False)
+        assert np.allclose(e, e_)
 
 
 def test_ff_yaff_periodic():
@@ -113,34 +157,3 @@ def test_ff_yaff_nonperiodic():
             - gpos_ / molmod.units.kjmol * molmod.units.angstrom,
             force_w,
             )
-
-
-def test_wrapper_openmm_mic():
-    system, pars = get_system('cau13')
-    configuration = Configuration(system, pars)
-    kind = 'all'
-
-    # YAFF and OpenMM use a different switching function. If it is disabled,
-    # the results between both are identical up to 6 decimals
-    configuration.switch_width = 0.0 # disable switching
-    configuration.rcut = 10.0 # request cutoff of 10 angstorm
-    configuration.cell_interaction_radius = 10.0
-    configuration.update_properties(configuration.write())
-    conversion = ExplicitConversion(pme_error_thres=5e-4)
-    seed_mm = conversion.apply(configuration, seed_kind=kind)
-    wrapper = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
-
-    u = molmod.units.angstrom
-    seed_yaff = configuration.create_seed(kind=kind)
-    positions = seed_yaff.system.pos.copy() / u
-    rvecs = seed_yaff.system.cell._get_rvecs().copy() / u
-
-    e = wrapper.evaluate(positions, rvecs, do_forces=False)
-
-    # make random periodic displacements
-    for i in range(5):
-        coefficients = np.random.randint(-3, high=3, size=(3, 1))
-        atom = np.random.randint(0, high=seed_yaff.system.natom, size=(10,))
-        positions[atom, :] += np.sum(coefficients * rvecs, axis=0)
-        e_ = wrapper.evaluate(positions, rvecs, do_forces=False)
-        assert np.allclose(e, e_)
