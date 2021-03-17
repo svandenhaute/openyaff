@@ -158,21 +158,21 @@ FIXQ:BOND     O_OH       ZR   0.180
 #  In MM3, if ONLYPAULI=1 then only the pauli term will be used.
 #  If ONLYPAULI=0, the full MM3 expression is used with 12.
 
-MM3:UNIT SIGMA angstrom
-MM3:UNIT EPSILON kcalmol
-MM3:SCALE 1 0.0
-MM3:SCALE 2 0.0
-MM3:SCALE 3 1.0
+MM3CAP:UNIT SIGMA angstrom
+MM3CAP:UNIT EPSILON kcalmol
+MM3CAP:SCALE 1 0.0
+MM3CAP:SCALE 2 0.0
+MM3CAP:SCALE 3 1.0
 
 # ---------------------------------------------
 # KEY      ffatype  SIGMA  EPSILON  ONLYPAULI
 # ---------------------------------------------
-MM3:PARS      ZR     2.540   0.300      0
-MM3:PARS    O_CA     1.820   0.059      0
-MM3:PARS    O_OX     1.820   0.059      0
-MM3:PARS    O_OH     1.820   0.059      0
-MM3:PARS    C_CA     1.940   0.056      0
-MM3:PARS    C_PC     1.960   0.056      0
-MM3:PARS    C_PH     1.960   0.056      0
-MM3:PARS    H_OH     1.600   0.016      0
-MM3:PARS    H_PH     1.620   0.020      0
+MM3CAP:PARS      ZR     2.540   0.300      0
+MM3CAP:PARS    O_CA     1.820   0.059      0
+MM3CAP:PARS    O_OX     1.820   0.059      0
+MM3CAP:PARS    O_OH     1.820   0.059      0
+MM3CAP:PARS    C_CA     1.940   0.056      0
+MM3CAP:PARS    C_PC     1.960   0.056      0
+MM3CAP:PARS    C_PH     1.960   0.056      0
+MM3CAP:PARS    H_OH     1.600   0.016      0
+MM3CAP:PARS    H_PH     1.620   0.020      0

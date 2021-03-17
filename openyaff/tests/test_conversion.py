@@ -217,17 +217,17 @@ def test_check_compatibility():
 
     # generate pars with unsupported prefix
     pars_unsupported = """
-    MM3CAP:UNIT SIGMA angstrom
-    MM3CAP:UNIT EPSILON kcalmol
-    MM3CAP:SCALE 1 1.0
-    MM3CAP:SCALE 2 1.0
-    MM3CAP:SCALE 3 1.0
+    BLAAA:UNIT SIGMA angstrom
+    BLAAA:UNIT EPSILON kcalmol
+    BLAAA:SCALE 1 1.0
+    BLAAA:SCALE 2 1.0
+    BLAAA:SCALE 3 1.0
 
     # ---------------------------------------------
     # KEY      ffatype  SIGMA  EPSILON  ONLYPAULI
     # ---------------------------------------------
 
-    MM3CAP:PARS      C     2.360   0.116      0"""
+    BLAAA:PARS      C     2.360   0.116      0"""
 
     with pytest.raises(AssertionError):
         configuration = Configuration(system, pars_unsupported)

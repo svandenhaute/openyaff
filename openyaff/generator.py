@@ -1096,7 +1096,103 @@ class MM3Generator(yaff.NonbondedGenerator):
         # OPENMM DISPERSION
         ####################################################################
 
+        # to avoid diverging energies, the MM3 potential is cutoff for distances
+        # below 0.6 angstrom, and replaced by a linear potential such that
+        # energy and forces are continuous. This is important when restarting
+        # simulations which involve the MC barostat
+
+        #mm3 = 'epsilon * (1.84 * 100000.0 * exp(-12.0 * r / sigma) - 2.25 * (sigma / r)^6)'
+        #r_switch = 0.08 # in nanometer
+        #deriv = ('(epsilon * ' # evaluate derivative at r_switch
+        #    '(1.84 * 100000.0 * exp(-12.0 * {} / sigma) * (-12.0) / sigma '
+        #    '- 2.25 * (sigma)^6 * (-6) * (1 / {})^7))'.format(r_switch, r_switch))
+        #value = ('(epsilon * (1.84 * 100000.0 * exp(-12.0 * {} / sigma)'
+        #        ' - 2.25 * (sigma / {})^6))'.format(r_switch, r_switch))
+        #linear = '({}) + ({}) * (r - ({}))'.format(value, deriv, r_switch)
+        #energy = '({}) * step(r - ({})) + ({}) * step(({}) - r); '.format(
+        #        mm3,
+        #        r_switch,
+        #        linear,
+        #        r_switch,
+        #        )
+        logger.critical('Do not use the default MM3 interaction because '
+                'it diverges to minus infinity at very short distances. This '
+                'may be problematic when using any of the Monte Carlo '
+                'barostats. To resolve this, replace the prefix MM3 with '
+                'MM3CAP')
         energy = 'epsilon * (1.84 * 100000.0 * exp(-12.0 * r / sigma) - 2.25 * (sigma / r)^6); '
+        energy += 'epsilon=sqrt(EPSILON1 * EPSILON2); sigma=SIGMA1 + SIGMA2;'
+        periodic = not (system.cell.nvec == 0)
+        scale_index = 0
+        for key, value in scale_table.items():
+            assert(value == 0.0 or value == 1.0)
+            if value == 0.0:
+                scale_index += 1
+
+        mmgen = MM3ForceGenerator(
+                periodic,
+                energy,
+                ['SIGMA', 'EPSILON'],
+                [],
+                )
+
+        mmgen.add_particles(system, sigmas, epsilons)
+        mmgen.set_rcut(ff_args.rcut)
+        mmgen.set_truncation(ff_args.tr)
+        mmgen.set_tailcorrections(ff_args.tailcorrections)
+        mmgen.apply_exclusions(
+                system.natom,
+                scale_index,
+                [system.neighs1, system.neighs2, system.neighs3],
+                )
+        return [mmgen.force]
+
+
+class MM3CAPGenerator(yaff.NonbondedGenerator):
+    prefix = 'MM3CAP'
+    suffixes = ['UNIT', 'SCALE', 'PARS']
+    par_info = [('SIGMA', float), ('EPSILON', float), ('ONLYPAULI', int)]
+
+    def __call__(self, system, parsec, ff_args, dispersion_scale_index=None,
+            **kwargs):
+        self.check_suffixes(parsec)
+        conversions = self.process_units(parsec['UNIT'])
+        par_table = self.process_pars(parsec['PARS'], conversions, 1)
+        scale_table = self.process_scales(parsec['SCALE'])
+        forces = self.apply(par_table, scale_table, system, ff_args,
+                dispersion_scale_index)
+        return forces
+
+    def apply(self, par_table, scale_table, system, ff_args,
+            dispersion_scale_index):
+        # Prepare the atomic parameters
+        sigmas = np.zeros(system.natom)
+        epsilons = np.zeros(system.natom)
+        onlypaulis = np.zeros(system.natom, np.int32)
+        for i in range(system.natom):
+            key = (system.get_ffatype(i),)
+            par_list = par_table.get(key, [])
+            if len(par_list) > 2:
+                raise TypeError('Superposition should not be allowed for non-covalent terms.')
+            elif len(par_list) == 1:
+                sigmas[i], epsilons[i], onlypaulis[i] = par_list[0]
+
+        for i in range(len(onlypaulis)):
+            assert(onlypaulis[0] == 0)
+
+        ####################################################################
+        # OPENMM DISPERSION
+        ####################################################################
+
+        mm3 = 'epsilon * (1.84 * 100000.0 * exp(-12.0 * r / sigma) - 2.25 * (sigma / r)^6)'
+        r_switch = '(0.355114 * sigma)'
+        linear = 'epsilon * (5799.303156-12182.86986*r/sigma)'
+        energy = '({}) * step(r - ({})) + ({}) * step(({}) - r); '.format(
+                mm3,
+                r_switch,
+                linear,
+                r_switch,
+                )
         energy += 'epsilon=sqrt(EPSILON1 * EPSILON2); sigma=SIGMA1 + SIGMA2;'
         periodic = not (system.cell.nvec == 0)
         scale_index = 0
