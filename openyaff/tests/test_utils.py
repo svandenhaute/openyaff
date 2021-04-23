@@ -20,7 +20,6 @@ def test_transform_lower_triangular():
         trial *= np.sign(np.linalg.det(trial))
         assert np.linalg.det(trial) > 0
         pos   = np.random.uniform(-100, 100, size=(10, 3))
-        manual = np.linalg.cholesky(trial @ trial.T)
         transform_lower_triangular(pos, trial) # in-place
         # comparison with cholesky made inside transform_lower_triangular
 

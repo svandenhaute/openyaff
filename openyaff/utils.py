@@ -90,7 +90,7 @@ def transform_lower_triangular(pos, rvecs, reorder=False):
 
 
 def transform_symmetric(pos, rvecs):
-    """Transforms coordinate axes such that cell matrix is lower diagonal
+    """Transforms coordinate axes such that cell matrix is symmetric
 
     Parameters
     ----------
