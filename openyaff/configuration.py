@@ -8,7 +8,8 @@ from datetime import datetime
 
 from openyaff.utils import determine_rcut, transform_lower_triangular, \
         compute_lengths_angles, is_lower_triangular, is_reduced, \
-        reduce_box_vectors, log_header, wrap_coordinates
+        reduce_box_vectors, log_header, wrap_coordinates, \
+        find_smallest_supercell
 from openyaff.seeds import YaffSeed
 from openyaff.generator import COVALENT_PREFIXES, DISPERSION_PREFIXES, \
         ELECTROSTATIC_PREFIXES
@@ -29,9 +30,9 @@ class Configuration:
 
     """
     properties = [
-            'supercell',
-            'cell_interaction_radius',
+            'interaction_radius',
             'rcut',
+            'supercell',
             'switch_width',
             'tailcorrections',
             'ewald_alphascale',
@@ -51,8 +52,10 @@ class Configuration:
             string containing the contents of a YAFF force field parameters file
 
         """
-        self.periodic = (system.cell._get_nvec() == 3)
-        # DO NOT PERFORM REDUCTION BUT RETAIN ORIGINAL CELL VECTORS
+        if (system.cell is not None) and (system.cell._get_nvec() == 3):
+            self.box = system.cell._get_rvecs() / molmod.units.angstrom
+        else:
+            self.box = None # nonperiodic system does not have box vectors
         self.system = system
 
         # generate parameters object to keep track of prefixes 
@@ -150,9 +153,9 @@ class Configuration:
 
         # construct FFArgs instance and set properties
         ff_args = yaff.FFArgs()
-        if self.periodic:
-            # generate supercell based on *original* rvecs
-            system = self.system.supercell(*self.supercell) # possibly (1, 1, 1)
+        if self.box is not None:
+            supercell = self.determine_supercell()
+            system = self.system.supercell(*supercell)
             # apply reduction
             rvecs = system.cell._get_rvecs().copy()
             transform_lower_triangular(system.pos, rvecs, reorder=True)
@@ -182,40 +185,18 @@ class Configuration:
             ff_args.gcut_scale = self.ewald_gcutscale
         return YaffSeed(system, parameters, ff_args)
 
-    def determine_supercell(self, rcut):
-        """Determines the smallest supercell for which rcut is possible
-
-        Since OpenMM does not allow particles to interact with their
-        periodic copies, the maximum allowed interaction range (often equal to
-        the cutoff range of the nonbonded interactions) is determined by the
-        cell geometry. This function inspects the unit cell and supercells
-        of the system to compute the maximum allowed rcut for each option.
-        The supercell tuple is constructed based on the *reduced form* of the
-        initial cell as stored in the system .chk.
-
-        Parameters
-        ----------
-
-        rcut : float [angstrom]
-            desired cutoff radius
-
-        """
-        rcut_ = rcut * molmod.units.angstrom
-        rvecs = self.system.cell._get_rvecs()
-        current_rcut = 0
-        i, j, k = (1, 1, 1)
-        while (k < 20) and (current_rcut < rcut_): # c vector is last
-            j = 1
-            while (j < 20) and (current_rcut < rcut_): # b vector second 
-                i = 1
-                while (i < 20) and (current_rcut < rcut_): # a vector first
-                    supercell = (i, j, k)
-                    rvecs_ = np.array(supercell)[:, np.newaxis] * rvecs
-                    current_rcut = determine_rcut(rvecs_)
-                    i += 1
-                j += 1
-            k += 1
-        return list(supercell)
+    def determine_supercell(self):
+        """Determines supercell of the system"""
+        assert self.box is not None
+        if self.supercell == 'auto':
+            return find_smallest_supercell(
+                    self.box,
+                    self.interaction_radius,
+                    )
+        else: # supercell is hardcoded
+            assert isinstance(self.supercell, list)
+            assert len(self.supercell) == 3
+            return list(self.supercell)
 
     def get_prefixes(self, kind):
         """Returns the prefixes belonging to a specific kind
@@ -251,8 +232,9 @@ class Configuration:
         log_header('force field configuration', logger)
         logger.info('')
         logger.info('')
-        if self.periodic:
-            natom     = np.prod(np.array(self.supercell)) * self.system.natom
+        if self.box is not None:
+            supercell = self.determine_supercell()
+            natom = np.prod(np.array(supercell)) * self.system.natom
         else:
             natom = self.system.natom
         config = {}
@@ -279,20 +261,19 @@ class Configuration:
         logger.info('')
         logger.info('')
         natom = self.system.natom
-        if self.periodic:
+        if self.box is not None:
             system_type = 'periodic'
         else:
             system_type = 'non-periodic'
         logger.info('number of atoms:     {}'.format(natom))
         logger.info('system type:         ' + system_type)
         logger.info('')
-        if self.periodic:
-            rvecs = self.system.cell._get_rvecs() / molmod.units.angstrom
-            lengths, angles = compute_lengths_angles(rvecs, degree=True)
+        if self.box is not None:
+            lengths, angles = compute_lengths_angles(self.box, degree=True)
             logger.info('initial box vectors (in angstrom):')
-            logger.info('\ta: {}'.format(rvecs[0, :]))
-            logger.info('\tb: {}'.format(rvecs[1, :]))
-            logger.info('\tc: {}'.format(rvecs[2, :]))
+            logger.info('\ta: {}'.format(self.box[0, :]))
+            logger.info('\tb: {}'.format(self.box[1, :]))
+            logger.info('\tc: {}'.format(self.box[2, :]))
             logger.info('')
             logger.info('initial box lengths (in angstrom):')
             logger.info('\ta: {:.4f}'.format(lengths[0]))
@@ -305,6 +286,7 @@ class Configuration:
             logger.info('\tgamma: {:.4f}'.format(angles[2]))
             logger.info('')
             logger.info('')
+            rvecs = np.array(self.box) # create copy
             transform_lower_triangular(np.zeros((1, 3)), rvecs, reorder=True)
             reduce_box_vectors(rvecs)
             lengths, angles = compute_lengths_angles(rvecs, degree=True)
@@ -398,19 +380,19 @@ class Configuration:
 
     def initialize_properties(self):
         """Initializes properties to YAFF defaults"""
-        try:
-            self.supercell = [1, 1, 1] # default supercell setting
-        except ValueError:
-            pass
-
         rcut_default = yaff.FFArgs().rcut / molmod.units.angstrom
         try:
-            self.cell_interaction_radius = rcut_default
+            self.interaction_radius = rcut_default
         except ValueError:
             pass
 
         try:
             self.rcut = rcut_default
+        except ValueError:
+            pass
+
+        try:
+            self.supercell = 'auto' # default is smallest possible supercell
         except ValueError:
             pass
 
@@ -443,37 +425,14 @@ class Configuration:
         config : dict
             dictionary, e.g. loaded from .yml file
         """
+        # order of property setting matters due to dependencies!
+        # first set the desired interaction radius
+        # then set the cutoff, and require that it is smaller than the radius
+        # then set the supercell; if a manual supercell is requested, verify
+        # that it is large enough for the requested radius.
         for name in self.properties:
             if name in config['yaff'].keys():
                 setattr(self, name, config['yaff'][name])
-
-        # double check whether nonbonded cutoff is smaller than cell size
-        if self.rcut is not None:
-            assert self.rcut <= self.cell_interaction_radius
-
-        # The supercell is determined based on the user input in the following
-        # way:
-        # 
-        # 1. the cell specified by the supercell keyword is evaluated to see
-        #    if it is large enough to accomodate interactions with a range
-        #    as specified by the cell_interaction_radius keyword. If it is, then the
-        #    supercell is valid for this system.
-        # 2. If it is not large enough, then this value is ignored. Instead,
-        #    a short calculation is performed in order to determine the smallest
-        #    possible supercell that is compatible with the given
-        #    cell_interaction_radius keyword.
-
-        if self.periodic:
-            assert self.supercell is not None
-            rvecs = self.system.cell._get_rvecs() / molmod.units.angstrom
-            supercell = tuple(self.supercell)
-            rvecs_ = np.array(supercell)[:, np.newaxis] * rvecs
-            allowed_rcut = determine_rcut(rvecs_)
-            if allowed_rcut > self.cell_interaction_radius:
-                pass # do nothing, self.supercell is OK
-            else: # determine smallest possible supercell that is compatible
-                supercell = self.determine_supercell(self.cell_interaction_radius)
-                self.supercell = supercell
 
     @staticmethod
     def annotate(path_yml):
@@ -485,21 +444,29 @@ class Configuration:
     charges, ...). Some keywords that appear in the list below may therefore
     not actually be valid for this specific configuration.
 
+    interaction_radius:
+        if the supercell keyword is set to 'auto', then the supercell is
+        determined as the smallest possible supercell that can accomodate
+        interactions of this size. This value should be slightly larger than the
+        nonbonded cutoff to ensure that the periodic box remains sufficiently
+        large for the employed cutoff throughout a constant pressure MD
+        simulation (as in that case, the box volume will fluctuate).
+
     supercell:
         determines the supercell to use. OpenMM does not allow interactions
         to reach further than half the *shortest* cell vector in its reduced
-        representation. NOTE: THE SUPERCELL TUPLE REFERS TO THE CELL VECTORS
-        IN THE REDUCED REPRESENTATION, NOT TO THE ORIGINAL CELL VECTORS.
+        representation.
         For most nanoporous materials and cutoff ranges (10 - 15 angstrom),
         this implies that validation with OpenMM is almost always performed on
-        supercells of those in the .chk input.
-        By default, OpenYAFF will suggest the smallest possible unit cell that
-        is compatible with the default cutoff distance. Other supercells and
-        their corresponding largest cutoff distance are logged when executing
-        `openyaff configure`.
+        a supercell of the original unit cell in the .chk input.
+        If this is set to 'auto', then OpenYAFF will use the smallest possible
+        supercell that is compatible with the chosen interaction radius.
+        If this is a list of three integers, then these represent the number
+        of cell replicas in the first, second and third box vector directions.
+        Other supercells and their corresponding largest cutoff distance are
+        logged when executing `openyaff configure`.
         (see http://docs.openmm.org/latest/userguide/theory.html#periodic-boundary-conditions
         for more information on the reduced cell representation in OpenMM).
-        )
 
     rcut:
         cutoff distance of the nonbonded interactions.
@@ -549,25 +516,46 @@ class Configuration:
 
     @supercell.setter
     def supercell(self, value):
-        if self.periodic:
-            assert len(value) == 3        # systems are 3D periodic
-            self._supercell = list(value) # store as list because of pyyaml
+        if self.box is not None:
+            if value == 'auto':
+                pass
+            elif len(value) == 3: # requested cell needs to be large enough
+                supercell = find_smallest_supercell(
+                        self.box,
+                        self.interaction_radius,
+                        )
+                box = np.array(value)[:, np.newaxis] * self.box
+                allowed_rcut = determine_rcut(box)
+                if allowed_rcut < self.interaction_radius:
+                    raise ValueError('The requested supercell {} only supports'
+                            ' interactions up to {} angstrom, while the '
+                            'requested interaction radius is set to {} '
+                            'angstrom. The smallest possible supercell for this'
+                            ' system is {}.'.format(
+                                value,
+                                allowed_rcut,
+                                self.interaction_radius,
+                                supercell,
+                                ))
+            else:
+                raise AssertionError
+            self._supercell = value
         else: # property not applicable
             self._supercell = None
             raise ValueError('Cannot use supercell keyword because system is '
-                    'aperiodic')
+                    'nonperiodic')
 
     @property
-    def cell_interaction_radius(self):
+    def interaction_radius(self):
         return self._cell_radius
 
-    @cell_interaction_radius.setter
-    def cell_interaction_radius(self, value):
-        if self.periodic:
+    @interaction_radius.setter
+    def interaction_radius(self, value):
+        if self.box is not None:
             self._cell_radius = value
         else: # property not applicable
             self._cell_radius = None
-            raise ValueError('Cannot use cell_interaction_radius keyword '
+            raise ValueError('Cannot use interaction_radius keyword '
                     'because system is nonperiodic')
 
     @property
@@ -589,13 +577,13 @@ class Configuration:
 
         """
         # rcut applicable only to nonbonded force parts:
-        if (self.periodic and (len(self.get_prefixes('nonbonded')) > 0)):
+        if (self.box is not None) and (len(self.get_prefixes('nonbonded')) > 0):
             assert type(value) == float
             self._rcut = value
-            assert self.cell_interaction_radius is not None
-            if self.rcut > self.cell_interaction_radius:
-                logger.debug('increasing cell_interaction_radius to rcut')
-                self.cell_interaction_radius = self.rcut
+            assert self.interaction_radius is not None
+            if self.rcut > self.interaction_radius:
+                logger.debug('increasing interaction_radius to rcut')
+                self.interaction_radius = self.rcut
             return True
         else: # property not applicable
             self._rcut = None
@@ -622,7 +610,7 @@ class Configuration:
             cutoff. (YAFF default value is 4 angstrom)
 
         """
-        if (self.periodic and (len(self.get_prefixes('dispersion')) > 0)):
+        if (self.box is not None) and (len(self.get_prefixes('dispersion')) > 0):
             assert type(value) == float
             self._switch_width = value
             return True
@@ -650,7 +638,7 @@ class Configuration:
         """
         # tailcorrections apply only to dispersion nonbonded force parts in
         # periodic systems:
-        if (self.periodic and (len(self.get_prefixes('dispersion')) > 0)):
+        if (self.box is not None) and (len(self.get_prefixes('dispersion')) > 0):
             assert type(value) == bool
             self._tailcorrections = value
             return True
@@ -677,7 +665,7 @@ class Configuration:
 
         """
         # ewald parameters apply only to periodic systems with electrostatics
-        if ('FIXQ' in self.prefixes) and self.periodic:
+        if ('FIXQ' in self.prefixes) and (self.box is not None):
             assert type(value) == float
             self._ewald_alphascale = value
         else:
@@ -703,7 +691,7 @@ class Configuration:
 
         """
         # ewald parameters apply only to periodic systems with electrostatics
-        if ('FIXQ' in self.prefixes) and self.periodic:
+        if ('FIXQ' in self.prefixes) and (self.box is not None):
             assert type(value) == float
             self._ewald_gcutscale = value
         else:

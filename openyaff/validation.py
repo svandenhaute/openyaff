@@ -282,12 +282,12 @@ class SinglePointValidation(RandomStateValidation):
         # generate states
         states = []
         positions = seed_yaff.system.pos.copy() / angstrom
-        if configuration.periodic:
+        if configuration.box is not None:
             rvecs = seed_yaff.system.cell._get_rvecs().copy() / angstrom
         for i in range(self.nstates):
             delta = 2 * self.disp_ampl * np.random.uniform(size=positions.shape)
             state = (positions + delta,)
-            if configuration.periodic:
+            if configuration.box is not None:
                 delta = 2 * self.box_ampl * np.random.uniform(size=rvecs.shape)
                 delta[0, 1] = 0
                 delta[0, 2] = 0
@@ -382,8 +382,8 @@ class StressValidation(RandomStateValidation):
 
     def _internal_validate(self, configuration, conversion, platform, kind):
         """Calculates the numerical stress over a series of states"""
-        assert configuration.periodic, ('cannot compute numerical stress for '
-                'nonperiodic systems')
+        assert configuration.box is not None, ('cannot compute numerical stress'
+                ' for nonperiodic systems')
 
         # perform conversion, initialize arrays and wrappers
         seed_yaff = configuration.create_seed(kind)

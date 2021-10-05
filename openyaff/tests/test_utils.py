@@ -7,7 +7,7 @@ from openyaff.utils import transform_lower_triangular, is_lower_triangular, \
         reduce_box_vectors, is_reduced, transform_symmetric, \
         do_gram_schmidt_reduction, compute_lengths_angles, \
         estimate_cell_derivative, wrap_coordinates, create_openmm_system, \
-        create_openmm_topology
+        create_openmm_topology, find_smallest_supercell
 from openyaff.configuration import Configuration
 from openyaff.wrappers import YaffForceFieldWrapper
 
@@ -77,6 +77,13 @@ def test_lattice_reduction():
 
     # assert equality of diagonal elements from both methods
     np.testing.assert_almost_equal(np.diag(rvecs), np.diag(reduced_LT))
+
+
+def test_supercell():
+    system, pars = get_system('cau13')
+    rvecs = system.cell._get_rvecs() / molmod.units.angstrom
+    supercell = find_smallest_supercell(rvecs, 18)
+    assert tuple(supercell) == (3, 4, 5)
 
 
 def test_compute_lengths_angles():

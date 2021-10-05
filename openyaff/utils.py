@@ -83,7 +83,7 @@ def transform_lower_triangular(pos, rvecs, reorder=False):
     rotation = np.linalg.inv(q.T) @ flip_vectors # full (improper) rotation
     pos[:]   = pos @ rotation
     rvecs[:] = rvecs @ rotation
-    assert np.allclose(rvecs, np.linalg.cholesky(rvecs @ rvecs.T))
+    assert np.allclose(rvecs, np.linalg.cholesky(rvecs @ rvecs.T), atol=1e-6)
     rvecs[0, 1] = 0
     rvecs[0, 2] = 0
     rvecs[1, 2] = 0
@@ -130,6 +130,51 @@ def determine_rcut(rvecs):
             rvecs_[1, 1],
             rvecs_[2, 2],
             ]) / 2
+
+
+def find_smallest_supercell(rvecs, rcut, nmax=20):
+    """Determines the smallest possible supercell that is larger than rcut
+
+    Since OpenMM does not allow particles to interact with their
+    periodic copies, the maximum allowed interaction range (often equal to
+    the cutoff range of the nonbonded interactions) is determined by the
+    cell geometry. This function computes the 'smallest' supercell that is
+    large enough to accomodate interactions with a given rcut
+
+    Parameters
+    ----------
+
+    rvecs : array_like
+        (3, 3) array with box vectors as rows
+
+    rcut : float [angstrom]
+        desired cutoff radius
+
+    nmax : int
+        maximum number of cell duplicates to be considered. All supercells
+        between (1, 1, 1) and (nmax, nmax, nmax) will be inspected.
+
+    """
+    assert nmax > 1
+    volumes = np.zeros( (nmax - 1) ** 3)
+    cutoffs = np.zeros( (nmax - 1) ** 3)
+    cells   = np.zeros(((nmax - 1) ** 3, 3), dtype=np.int32)
+
+    volume = np.linalg.det(rvecs)
+    count = 0
+    for i in range(1, nmax):
+        for j in range(1, nmax):
+            for k in range(1, nmax):
+                supercell = (i, j, k)
+                rvecs_ = np.array(supercell)[:, np.newaxis] * rvecs
+                cutoffs[count] = determine_rcut(rvecs_)
+                volumes[count] = np.prod(supercell) * volume
+                cells[count] = np.array(supercell)
+                count += 1
+
+    volumes_above = volumes[cutoffs >= rcut]
+    cells_above   = cells[cutoffs >= rcut]
+    return list(cells_above[np.argmin(volumes_above)])
 
 
 def reduce_box_vectors(rvecs):
@@ -467,17 +512,24 @@ def get_scale_index(definition):
     return scale_index
 
 
+def generate_residues(bonds, positions, box=None):
+    """Partitions the system into residues
+
+    """
+    pass
+
+
 class Colors:
-   PURPLE = '\033[95m'
-   CYAN = '\033[96m'
-   DARKCYAN = '\033[36m'
-   BLUE = '\033[94m'
-   GREEN = '\033[92m'
-   YELLOW = '\033[93m'
-   RED = '\033[91m'
-   BOLD = '\033[1m'
-   UNDERLINE = '\033[4m'
-   END = '\033[0m'
+    PURPLE = '\033[95m'
+    CYAN = '\033[96m'
+    DARKCYAN = '\033[36m'
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
 
 
 def log_header(name, logger, width=90, spacing=6):

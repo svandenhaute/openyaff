@@ -15,6 +15,53 @@ from systems import get_system
 from conftest import assert_tol
 
 
+def test_implicit_nonperiodic()
+    systems    = ['alanine']
+    platforms  = ['Reference']
+    seed_kinds = ['covalent', 'dispersion', 'electrostatic']
+
+    tolerance = {
+            ('Reference', 'covalent'): 1e-6,
+            ('Reference', 'dispersion'): 1e-6,
+            ('Reference', 'electrostatic'): 1e-6,
+            #('Cuda', 'covalent'): 1e-5,
+            #('Cuda', 'dispersion'): 1e-5,
+            #('Cuda', 'electrostatic'): 1e-5,
+            }
+
+    nstates   = 10
+    disp_ampl = 1.0
+    box_ampl  = 1.0
+
+    for name in systems:
+        for platform in platforms:
+            for kind in seed_kinds:
+                system, pars = get_system(name)
+                configuration = Configuration(system, pars)
+                tol = tolerance[(platform, kind)]
+
+                conversion = ExplicitConversion()
+                seed_mm = conversion.apply(configuration, seed_kind=kind)
+                seed_yaff = configuration.create_seed(kind=kind)
+
+                wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, platform)
+                wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
+                assert not wrapper_yaff.periodic # system should not be considered periodic
+                assert not wrapper_mm.periodic # system should not be considered periodic
+
+                pos = seed_yaff.system.pos.copy()
+                for i in range(nstates):
+                    dpos = np.random.uniform(-disp_ampl, disp_ampl, size=pos.shape)
+                    energy_mm, forces_mm = wrapper_mm.evaluate(
+                            (pos + dpos) / molmod.units.angstrom,
+                            )
+                    energy, forces = wrapper_yaff.evaluate(
+                            (pos + dpos) / molmod.units.angstrom,
+                            )
+                    assert_tol(energy, energy_mm, tol)
+                    assert_tol(forces, forces_mm, 10 * tol)
+
+
 def test_save_load_pdb(tmp_path):
     system, pars = get_system('mil53')
     configuration = Configuration(system, pars)
@@ -23,8 +70,8 @@ def test_save_load_pdb(tmp_path):
     # the results between both are identical up to 6 decimals
     configuration.switch_width = 0.0 # disable switching
     configuration.rcut = 10.0 # request cutoff of 10 angstorm
-    configuration.cell_interaction_radius = 11.0
-    configuration.update_properties(configuration.write())
+    configuration.interaction_radius = 11.0
+    #configuration.update_properties(configuration.write())
 
     conversion = ExplicitConversion(pme_error_thres=5e-4)
     seed_mm = conversion.apply(configuration, seed_kind='all')
@@ -68,7 +115,7 @@ def test_periodic():
 
     tolerance = {
             ('Reference', 'covalent'): 1e-6, # some MM3 terms have error 1e-7
-            ('Reference', 'dispersion'): 1e-3,
+            ('Reference', 'dispersion'): 1e-2, # some MM3 terms have error 1e-3
             ('Reference', 'electrostatic'): 1e-3,
             #('CUDA', 'covalent'): 1e-3,
             #('CUDA', 'dispersion'): 1e-3,
@@ -76,8 +123,8 @@ def test_periodic():
             }
 
     nstates   = 5
-    disp_ampl = 0.5
-    box_ampl  = 0.5
+    disp_ampl = 0.3
+    box_ampl  = 0.3
 
     for name in systems:
         for platform in platforms:
@@ -89,10 +136,9 @@ def test_periodic():
                 # YAFF and OpenMM use a different switching function. If it is disabled,
                 # the results between both are identical up to 6 decimals
                 configuration.switch_width = 0.0 # disable switching
-                configuration.rcut = 10.0 # request cutoff of 10 angstorm
-                configuration.cell_interaction_radius = 15.0
+                configuration.rcut = 13.0 # request cutoff of 13 angstorm
+                configuration.interaction_radius = 15.0
                 configuration.update_properties(configuration.write())
-
                 conversion = ExplicitConversion(pme_error_thres=5e-4)
                 seed_mm = conversion.apply(configuration, seed_kind=kind)
                 seed_yaff = configuration.create_seed(kind=kind)
@@ -124,6 +170,7 @@ def test_periodic():
                     assert_tol(forces, forces_mm, 10 * tol)
 
 
+@pytest.mark.skip(reason='removing ludicrous mode')
 def test_serialize_aggregate_nonperiodic(tmp_path):
     system, pars = get_system('alanine')
     configuration = Configuration(system, pars)
@@ -140,12 +187,13 @@ def test_serialize_aggregate_nonperiodic(tmp_path):
     assert_tol(forces, forces_l, 1e-5)
 
 
+@pytest.mark.skip(reason='removing ludicrous mode')
 def test_serialize_aggregate_nonperiodic(tmp_path):
     system, pars = get_system('cau13')
     configuration = Configuration(system, pars)
     configuration.switch_width = 0.0 # disable switching
     configuration.rcut = 10.0 # request cutoff of 10 angstorm
-    configuration.cell_interaction_radius = 15.0
+    configuration.interaction_radius = 15.0
     configuration.update_properties(configuration.write())
     yaff_seed = configuration.create_seed('covalent')
     positions = yaff_seed.system.pos / molmod.units.angstrom

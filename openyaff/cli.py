@@ -135,9 +135,6 @@ def initialize(cwd):
     configuration = Configuration.from_files(*input_files)
     # check if rcut should be determined 
     nonbonded_prefixes = configuration.get_prefixes('nonbonded')
-    if configuration.periodic and (len(nonbonded_prefixes) > 0):
-        supercell = configuration.determine_supercell(configuration.rcut)
-        configuration.supercell = supercell # smallest usable supercell
     configuration.log_system()
     configuration.log_config()
     logger.info('writing configuration file to')

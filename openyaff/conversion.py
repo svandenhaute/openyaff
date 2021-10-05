@@ -15,11 +15,12 @@ logger = logging.getLogger(__name__)
 class Conversion:
     """Base class for conversion objects"""
     kind = None
-    properties = []
+    properties = [
+            'pme_error_thres',
+            ]
 
-    def __init__(self):
-        """Constructor; should initialize properties to default values"""
-        pass
+    def __init__(self, pme_error_thres=1e-5):
+        self.pme_error_thres = pme_error_thres
 
     def write(self, path_config=None):
         """Generates the .yml contents and optionally saves it to a file
@@ -89,23 +90,6 @@ class Conversion:
         lines = lines[:index] + comments + lines[index:]
         with open(path_yml, 'w') as f:
             f.write('\n'.join(lines))
-
-
-class ExplicitConversion(Conversion):
-    """Defines the explicit conversion procedure from YAFF to OpenMM
-
-    In this procedure, each YAFF generator is extended with function calls
-    to an OpenMM system object such that the force field generation occurs
-    synchronously between OpenMM and YAFF.
-
-    """
-    kind = 'explicit'
-    properties = [
-            'pme_error_thres',
-            ]
-
-    def __init__(self, pme_error_thres=1e-5):
-        self.pme_error_thres = pme_error_thres
 
     def check_compatibility(self, configuration):
         """Checks compatibility of current settings with a given configuration
@@ -210,6 +194,28 @@ class ExplicitConversion(Conversion):
                     exclusion_policy = 'manual'
         return exclusion_policy, dispersion_scale_index
 
+    @property
+    def pme_error_thres(self):
+        """Returns the error threshold for the PME calculation"""
+        return self._pme_error_thres
+
+    @pme_error_thres.setter
+    def pme_error_thres(self, value):
+        self._pme_error_thres = value
+
+
+class ExplicitConversion(Conversion):
+    """Defines the explicit conversion procedure from YAFF to OpenMM
+
+    In this procedure, each YAFF generator is extended with function calls
+    to an OpenMM system object such that the force field generation occurs
+    synchronously between OpenMM and YAFF. This is the safest option, but the
+    output .xml file may become excessively large for systems with many atoms,
+    as each interaction is encoded manually in the file.
+
+    """
+    kind = 'explicit'
+
     def apply(self, configuration, seed_kind='all'):
         """Converts a yaff configuration into an OpenMM seed
 
@@ -242,7 +248,8 @@ class ExplicitConversion(Conversion):
         logger.debug('creating OpenMM System object')
         system_mm = create_openmm_system(yaff_seed.system)
         dummy = mm.HarmonicBondForce()
-        dummy.setUsesPeriodicBoundaryConditions(configuration.periodic)
+        periodic = configuration.box is not None
+        dummy.setUsesPeriodicBoundaryConditions(periodic)
         system_mm.addForce(dummy) # add empty periodic force
         kwargs = {}
 
@@ -276,6 +283,7 @@ class ExplicitConversion(Conversion):
             configuration for which to check compatibility
 
         """
+        raise NotImplementedError
         self.check_compatibility(configuration)
         policy, dispersion_scale_index = self.determine_exclusion_policy(configuration)
         logger.debug('exclusion policy: ' + policy)
@@ -289,7 +297,8 @@ class ExplicitConversion(Conversion):
             logger.debug('creating openmm system')
             system_mm = create_openmm_system(yaff_seed.system)
             dummy = mm.HarmonicBondForce()
-            dummy.setUsesPeriodicBoundaryConditions(configuration.periodic)
+            periodic = configuration.box is not None
+            dummy.setUsesPeriodicBoundaryConditions(periodic)
             system_mm.addForce(dummy) # add empty periodic force
             kwargs = {}
 
@@ -311,14 +320,18 @@ class ExplicitConversion(Conversion):
         return openmm_seed
 
 
-    @property
-    def pme_error_thres(self):
-        """Returns the error threshold for the PME calculation"""
-        return self._pme_error_thres
+class ImplicitConversion(Conversion):
+    """Defines the implicit conversion procedure from YAFF to OpenMM
 
-    @pme_error_thres.setter
-    def pme_error_thres(self, value):
-        self._pme_error_thres = value
+    """
+
+    def apply(self, configuration, seed_kind='all'):
+        self.check_compatibility(configuration)
+        policy, dispersion_scale_index = self.determine_exclusion_policy(configuration)
+        logger.debug('exclusion policy: ' + policy)
+        logger.debug('dispersion scale index: {}'.format(dispersion_scale_index))
+
+        # partition system in residues and corresponding templates
 
 
 def load_conversion(path_config):

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from openyaff import Configuration
 from openyaff.utils import yaff_generate
@@ -17,12 +18,9 @@ def test_initialize_periodic(tmp_path):
     with open(path_config, 'r') as f:
         content = f.read()
     assert content == """yaff:
-  cell_interaction_radius: 10.0
+  interaction_radius: 10.0
   rcut: 10.0
-  supercell:
-  - 1
-  - 1
-  - 1
+  supercell: auto
   switch_width: 4.0
   tailcorrections: false
 """ # whitespace matters
@@ -47,16 +45,9 @@ def test_update_properties(tmp_path):
 
     config = configuration.write()
     config['yaff']['rcut'] = 15.0
-    config['yaff']['cell_interaction_radius'] = 15.0
+    config['yaff']['interaction_radius'] = 15.0
     configuration.update_properties(config)
     assert configuration.rcut == 15.0
-
-
-def test_supercell():
-    system, pars = get_system('cau13')
-    configuration = Configuration(system, pars)
-    supercell = configuration.determine_supercell(18)
-    assert tuple(supercell) == (3, 4, 5)
 
 
 def test_from_files(tmp_path):
@@ -82,8 +73,10 @@ def test_create_seed_periodic():
     system, pars = get_system('cau13')
     configuration = Configuration(system, pars)
     # change parameters randomly
-    configuration.supercell = [3, 1, 1]
+    with pytest.raises(ValueError): # cell is too small
+        configuration.supercell = [3, 1, 1]
     configuration.rcut = 12.0
+    assert configuration.interaction_radius == 12.0 # should change too
     configuration.switch_width = 5.0
     configuration.tailcorrections = False
 
