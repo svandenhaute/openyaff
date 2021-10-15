@@ -1,5 +1,8 @@
+import molmod
 import numpy as np
 import pytest
+
+import simtk.unit as unit
 
 from openyaff import Configuration
 from openyaff.utils import yaff_generate
@@ -38,26 +41,36 @@ def test_topology_templates(tmp_path):
     assert len(configuration.templates[0]) == system.natom
     supercell = [2, 2, 2]
     configuration.supercell = supercell
-    top, _ = configuration.create_topology()
+    top, positions = configuration.create_topology()
     assert len(list(top.residues())) == np.prod(supercell)
     seed = configuration.create_seed()
     check_consistency_system_topology(seed.system, top)
+    assert np.allclose(positions, seed.system.pos / molmod.units.angstrom)
 
     (system, topology), pars = get_system('polymer')
     configuration = Configuration(system, pars, topology=topology)
     assert len(configuration.templates) == 3
-    top, _ = configuration.create_topology()
+    top, positions = configuration.create_topology()
     assert len(list(top.residues())) == len(list(topology.residues()))
     seed = configuration.create_seed()
     check_consistency_system_topology(seed.system, top)
+    assert np.allclose(positions, seed.system.pos / molmod.units.angstrom)
+    a, b, c = top.getPeriodicBoxVectors()
+    box = np.array([
+        a.value_in_unit(unit.angstrom),
+        b.value_in_unit(unit.angstrom),
+        c.value_in_unit(unit.angstrom),
+        ])
+    assert np.allclose(box, seed.system.cell._get_rvecs() / molmod.units.angstrom)
 
     # test nonperiodic
     system, pars = get_system('alanine')
     configuration = Configuration(system, pars)
     assert len(configuration.templates) == 1
-    top, _ = configuration.create_topology()
+    top, positions = configuration.create_topology()
     seed = configuration.create_seed()
     check_consistency_system_topology(seed.system, top)
+    assert np.allclose(positions, seed.system.pos / molmod.units.angstrom)
 
 
 def test_initialize_periodic(tmp_path):
@@ -116,9 +129,9 @@ def test_from_files(tmp_path):
     path_pars   = tmp_path / 'pars.txt'
     path_config = tmp_path / 'config.yml'
     configuration = Configuration.from_files(
-            path_system,
-            path_pars,
-            path_config,
+            chk=path_system,
+            txt=path_pars,
+            yml=path_config,
             )
 
 

@@ -55,7 +55,7 @@ def convert(cwd, input_files, seed_kind, full):
             path_pdb.unlink()
         mm.app.PDBFile.writeFile(
                 topology,
-                positions * unit.anstrom,
+                positions * unit.angstrom,
                 open(path_pdb, 'w+'),
                 keepIds=True,
                 )
@@ -85,7 +85,7 @@ def save(cwd, input_files, file_formats):
                 path_pdb.unlink()
             mm.app.PDBFile.writeFile(
                     topology,
-                    positions * unit.anstrom,
+                    positions * unit.angstrom,
                     open(path_pdb, 'w+'),
                     keepIds=True,
                     )

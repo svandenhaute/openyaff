@@ -21,34 +21,27 @@ jobs:
       - name: Install dependencies
         shell: bash -l {0}
         run: |
-          conda info
-          conda list
           conda activate testenv
           conda env update --name testenv --file environment.yml
 
           # install YAFF manually as conda package is outdated
-          git clone https://github.com/molmod/yaff
-          cd yaff
-          python setup.py install
-          cd ..
-          rm -rf yaff
+          pip install git+https://github.com/molmod/yaff
+          #git clone https://github.com/molmod/yaff
+          #cd yaff
+          #python setup.py install
+          #cd ..
+          #rm -rf yaff
 
       - name: Install openyaff
         shell: bash -l {0}
         run: |
-          conda info
-          conda list
           conda activate testenv
-          echo 'TESTMESSAGE'
           python setup.py install
 
       - name: Execute tests
         shell: bash -l {0}
         run: |
-          conda info
-          conda list
           conda activate testenv
-          echo 'TESTMESSAGE'
           pip install pytest coverage
           coverage run -m py.test
           coverage xml

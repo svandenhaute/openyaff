@@ -15,53 +15,6 @@ from systems import get_system
 from conftest import assert_tol
 
 
-def test_implicit_nonperiodic()
-    systems    = ['alanine']
-    platforms  = ['Reference']
-    seed_kinds = ['covalent', 'dispersion', 'electrostatic']
-
-    tolerance = {
-            ('Reference', 'covalent'): 1e-6,
-            ('Reference', 'dispersion'): 1e-6,
-            ('Reference', 'electrostatic'): 1e-6,
-            #('Cuda', 'covalent'): 1e-5,
-            #('Cuda', 'dispersion'): 1e-5,
-            #('Cuda', 'electrostatic'): 1e-5,
-            }
-
-    nstates   = 10
-    disp_ampl = 1.0
-    box_ampl  = 1.0
-
-    for name in systems:
-        for platform in platforms:
-            for kind in seed_kinds:
-                system, pars = get_system(name)
-                configuration = Configuration(system, pars)
-                tol = tolerance[(platform, kind)]
-
-                conversion = ExplicitConversion()
-                seed_mm = conversion.apply(configuration, seed_kind=kind)
-                seed_yaff = configuration.create_seed(kind=kind)
-
-                wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, platform)
-                wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
-                assert not wrapper_yaff.periodic # system should not be considered periodic
-                assert not wrapper_mm.periodic # system should not be considered periodic
-
-                pos = seed_yaff.system.pos.copy()
-                for i in range(nstates):
-                    dpos = np.random.uniform(-disp_ampl, disp_ampl, size=pos.shape)
-                    energy_mm, forces_mm = wrapper_mm.evaluate(
-                            (pos + dpos) / molmod.units.angstrom,
-                            )
-                    energy, forces = wrapper_yaff.evaluate(
-                            (pos + dpos) / molmod.units.angstrom,
-                            )
-                    assert_tol(energy, energy_mm, tol)
-                    assert_tol(forces, forces_mm, 10 * tol)
-
-
 def test_save_load_pdb(tmp_path):
     system, pars = get_system('mil53')
     configuration = Configuration(system, pars)
@@ -76,21 +29,29 @@ def test_save_load_pdb(tmp_path):
     conversion = ExplicitConversion(pme_error_thres=5e-4)
     seed_mm = conversion.apply(configuration, seed_kind='all')
     seed_yaff = configuration.create_seed(kind='all')
+    topology, pos = configuration.create_topology()
+    box = seed_yaff.system.cell._get_rvecs() / molmod.units.angstrom
 
     wrapper_mm = OpenMMForceFieldWrapper.from_seed(seed_mm, 'Reference')
     wrapper_yaff = YaffForceFieldWrapper.from_seed(seed_yaff)
     assert wrapper_yaff.periodic # system should not be considered periodic
     assert wrapper_mm.periodic # system should not be considered periodic
 
-    positions = seed_yaff.system.pos.copy() / molmod.units.angstrom
-    rvecs = seed_yaff.system.cell._get_rvecs().copy() / molmod.units.angstrom
+    #positions = seed_yaff.system.pos.copy() / molmod.units.angstrom
+    #rvecs = seed_yaff.system.cell._get_rvecs().copy() / molmod.units.angstrom
 
-    e0, f0 = wrapper_mm.evaluate(positions, rvecs, do_forces=True)
-    e1, f1 = wrapper_yaff.evaluate(positions, rvecs, do_forces=True)
+    e0, f0 = wrapper_mm.evaluate(pos, box, do_forces=True)
+    e1, f1 = wrapper_yaff.evaluate(pos, box, do_forces=True)
     assert np.allclose(e0, e1, rtol=1e-3)
 
     path_pdb = tmp_path / 'top.pdb'
-    seed_yaff.save_topology(path_pdb) # stores current positions and box vectors
+    mm.app.PDBFile.writeFile(
+            topology,
+            pos * unit.angstrom,
+            open(path_pdb, 'w+'),
+            keepIds=True,
+            )
+
     pdb = mm.app.PDBFile(str(path_pdb))
     positions = pdb.getPositions(asNumpy=True).value_in_unit(unit.angstrom)
     a, b, c  = pdb.getTopology().getPeriodicBoxVectors()

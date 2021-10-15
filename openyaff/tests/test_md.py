@@ -12,21 +12,13 @@ from systems import get_system
 def test_short_simulation(tmp_path):
     system, pars = get_system('uio66')
     configuration = Configuration(system, pars)
-    configuration.supercell = configuration.determine_supercell(10)
 
     # conversion
-    conversion  = ExplicitConversion()
-    openmm_seed = conversion.apply_ludicrous(configuration)
-    system   = openmm_seed.get_system()
-
-    # topology
-    yaff_seed = configuration.create_seed('all')
-    topology = yaff_seed.save_topology()
-
-    # initial state
-    u = molmod.units.nanometer / unit.nanometer
-    positions = yaff_seed.system.pos / u
-    box = yaff_seed.system.cell._get_rvecs() / u
+    conversion = ExplicitConversion()
+    openmm_seed = conversion.apply(configuration)
+    system = openmm_seed.get_system() # necessary to create Simulation object
+    topology, positions = configuration.create_topology()
+    a, b, c = topology.getPeriodicBoxVectors()
 
     # instantiate simulation for each platform
     platforms = ['Reference', 'CPU', 'CUDA', 'OpenCL']
@@ -47,5 +39,6 @@ def test_short_simulation(tmp_path):
                 platform,
                 )
         simulation.context.setPositions(positions)
-        simulation.context.setPeriodicBoxVectors(box[0], box[1], box[2])
+        #simulation.context.setPeriodicBoxVectors(box[0], box[1], box[2])
+        simulation.context.setPeriodicBoxVectors(a, b, c)
         simulation.step(20)

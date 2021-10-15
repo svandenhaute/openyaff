@@ -279,11 +279,7 @@ class Configuration:
             transform_lower_triangular(positions, box, reorder=True)
             reduce_box_vectors(box)
             wrap_coordinates(positions, box)
-            topology.setPeriodicBoxVectors([
-                    box[0] * unit.angstrom,
-                    box[1] * unit.angstrom,
-                    box[2] * unit.angstrom,
-                    ])
+            topology.setPeriodicBoxVectors(box * unit.angstrom)
 
             # add bonds from supercell system object
             system = self.system.supercell(*supercell)
@@ -363,6 +359,8 @@ class Configuration:
         graph = nx.Graph() # graph of entire system
         for i in range(self.system.natom):
             graph.add_node(i, kind=self.system.numbers[i])
+        if self.system.bonds is None:
+            self.system.bonds = np.zeros((0, 2))
         for bond in self.system.bonds:
             graph.add_edge(bond[0], bond[1])
 
@@ -387,6 +385,12 @@ class Configuration:
             thres = 4.0 # maximum distance of covalent bond 
             if self.box is not None:
                 for i in range(len(components)):
+                    # avoid edge case where no bonds/edges are present in the
+                    # component
+                    if len(list(components[i].edges())) > 0:
+                        pass
+                    else:
+                        continue
                     indices = np.array(components[i].edges())
                     lengths = np.linalg.norm(
                             positions[indices[:, 1], :] - positions[indices[:, 0], :],
@@ -647,7 +651,7 @@ class Configuration:
         system = yaff.System.from_file(str(chk))
         with open(txt, 'r') as f:
             pars = f.read()
-        if pdb is not None:
+        if (pdb is not None) and pdb.exists():
             topology = mm.app.PDBFile(str(pdb)).getTopology()
         else:
             topology = None
