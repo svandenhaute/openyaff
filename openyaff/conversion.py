@@ -270,69 +270,6 @@ class ExplicitConversion(Conversion):
         openmm_seed = OpenMMSeed(system_mm)
         return openmm_seed
 
-    def apply_ludicrous(self, configuration):
-        """Ludicrous mode for really big systems
-
-        This mode is necessary in order to be able to serialize the output
-        OpenMM System instances.
-
-        Parameters
-        ----------
-
-        configuration : openyaff.Configuration
-            configuration for which to check compatibility
-
-        """
-        raise NotImplementedError
-        self.check_compatibility(configuration)
-        policy, dispersion_scale_index = self.determine_exclusion_policy(configuration)
-        logger.debug('exclusion policy: ' + policy)
-        logger.debug('dispersion scale index: {}'.format(dispersion_scale_index))
-        parts = []
-        logger.debug('in ludicrous mode')
-        for seed in ['covalent', 'dispersion', 'electrostatic']:
-            logger.debug('GENERATING FOR SEED ' + seed)
-            logger.debug('creating yaff seed')
-            yaff_seed = configuration.create_seed(kind=seed)
-            logger.debug('creating openmm system')
-            system_mm = create_openmm_system(yaff_seed.system)
-            dummy = mm.HarmonicBondForce()
-            periodic = configuration.box is not None
-            dummy.setUsesPeriodicBoundaryConditions(periodic)
-            system_mm.addForce(dummy) # add empty periodic force
-            kwargs = {}
-
-            # if system is periodic and contains electrostatis; compute PME params
-            if (configuration.ewald_alphascale is not None and
-                    seed in ['all', 'electrostatic', 'nonbonded']):
-                alpha = configuration.ewald_alphascale
-                delta = np.exp(-(alpha) ** 2) / 2
-                if delta > self.pme_error_thres:
-                    kwargs['delta'] = delta
-                else:
-                    kwargs['delta'] = self.pme_error_thres
-            # add exclusion policy to kwargs
-            kwargs['exclusion_policy'] = policy
-            kwargs['dispersion_scale_index'] = dispersion_scale_index
-            apply_generators_mm(yaff_seed, system_mm, **kwargs)
-            parts.append(system_mm)
-        openmm_seed = OpenMMSeed(system=None, parts=parts)
-        return openmm_seed
-
-
-class ImplicitConversion(Conversion):
-    """Defines the implicit conversion procedure from YAFF to OpenMM
-
-    """
-
-    def apply(self, configuration, seed_kind='all'):
-        self.check_compatibility(configuration)
-        policy, dispersion_scale_index = self.determine_exclusion_policy(configuration)
-        logger.debug('exclusion policy: ' + policy)
-        logger.debug('dispersion scale index: {}'.format(dispersion_scale_index))
-
-        # partition system in residues and corresponding templates
-
 
 def load_conversion(path_config):
     with open(path_config, 'r') as f:

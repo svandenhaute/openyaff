@@ -4,7 +4,12 @@ import yaff
 import molmod
 import yaml
 import numpy as np
+import networkx as nx
 from datetime import datetime
+
+import simtk.openmm as mm
+import simtk.openmm.app
+import simtk.unit as unit
 
 from openyaff.utils import determine_rcut, transform_lower_triangular, \
         compute_lengths_angles, is_lower_triangular, is_reduced, \
@@ -39,7 +44,7 @@ class Configuration:
             'ewald_gcutscale',
             ]
 
-    def __init__(self, system, pars):
+    def __init__(self, system, pars, topology=None):
         """Constructor
 
         Parameters
@@ -50,6 +55,9 @@ class Configuration:
 
         pars : str
             string containing the contents of a YAFF force field parameters file
+
+        topology : openmm Topology or None
+            OpenMM topology which defines the residues present in the system
 
         """
         if (system.cell is not None) and (system.cell._get_nvec() == 3):
@@ -76,6 +84,22 @@ class Configuration:
         # use setters to initialize properties to default YAFF values
         # if properties are not applicable, they are initialized to None
         self.initialize_properties()
+
+        # match the residue templates to atoms in the system. Templates are
+        # determined based on an existing Topology object or are otherwise
+        # inferred based on the system connectivity.
+        self.topology = topology
+        if topology is not None: # make sure system and topology are consistent
+            assert system.natom == len(list(topology.atoms()))
+            for i, atom in zip(range(system.natom), topology.atoms()):
+                assert system.numbers[i] == atom.element._atomic_number
+            assert system.bonds.shape[0] == len(list(topology.bonds()))
+            bonds_tuples = [tuple(sorted(list(bond))) for bond in system.bonds]
+            for bond in topology.bonds():
+                indices_top = tuple(sorted((bond[0].index, bond[1].index)))
+                bonds_tuples.remove(indices_top)
+            assert len(bonds_tuples) == 0
+        self.templates, self.residues = self.define_templates()
 
     def create_seed(self, kind='all'):
         """Creates a seed for constructing a yaff.ForceField object
@@ -184,6 +208,250 @@ class Configuration:
         if self.ewald_gcutscale is not None:
             ff_args.gcut_scale = self.ewald_gcutscale
         return YaffSeed(system, parameters, ff_args)
+
+    def create_topology(self):
+        """Creates the topology for the current configuration"""
+        topology = mm.app.Topology()
+        chain = topology.addChain()
+
+        natoms = self.system.natom
+        count = 0
+        if self.box is not None:
+            supercell = self.determine_supercell()
+
+            # compute box vectors and allocate positions array
+            box = np.array(supercell)[:, np.newaxis] * self.box
+            positions = np.zeros((np.prod(supercell) * natoms, 3))
+
+            # construct map of atom indices to residues
+            atom_index_mapping = {}
+            for template, residues in self.residues.items():
+                for i, residue in enumerate(residues):
+                    for j, atom in enumerate(residue):
+                        atom_index_mapping[atom] = (template, i, j)
+            included_atoms = list(atom_index_mapping.keys())
+            assert tuple(sorted(included_atoms)) == tuple(range(natoms))
+
+            def name_residue(image, template, residue_index):
+                """Defines the name of a specific residue"""
+                return 'CELL' + str(image) + '_T' + str(template) + '_R' + str(i)
+
+            atoms_list = [] # necessary for adding bonds to topology
+            for image, index in enumerate(np.ndindex(tuple(supercell))):
+
+                # initialize residues and track them in a dict
+                current_residues = {}
+                for template, residues in self.residues.items():
+                    for i, residue in enumerate(residues):
+                        name = name_residue(image, template, i)
+                        residue = topology.addResidue(
+                                name=name,
+                                chain=chain,
+                                id=name,
+                                )
+                        current_residues[(template, i)] = residue
+
+                # add atoms to corresponding residue in topology (in their
+                # original order)
+                for j in range(natoms):
+                    key = atom_index_mapping[j]
+                    template = key[0]
+                    residue_index = key[1]
+                    atom_index = key[2]
+                    e = mm.app.Element.getByAtomicNumber(self.system.numbers[j])
+                    atom_name = 'giggle'
+                    atom = topology.addAtom(
+                            name=atom_name,
+                            element=e,
+                            residue=current_residues[(template, residue_index)]
+                            )
+                    atoms_list.append(atom)
+
+                # generate positions for this image
+                image_pos = self.system.pos / molmod.units.angstrom
+                translate = np.dot(np.array(index), self.box).reshape(1, 3)
+                image_pos += translate
+                start = (image) * natoms
+                stop  = (image + 1) * natoms
+                positions[start : stop, :] = image_pos.copy()
+
+            # apply cell reduction and wrap coordinates (similar to create_seed)
+            transform_lower_triangular(positions, box, reorder=True)
+            reduce_box_vectors(box)
+            wrap_coordinates(positions, box)
+            topology.setPeriodicBoxVectors([
+                    box[0] * unit.angstrom,
+                    box[1] * unit.angstrom,
+                    box[2] * unit.angstrom,
+                    ])
+
+            # add bonds from supercell system object
+            system = self.system.supercell(*supercell)
+            for bond in system.bonds:
+                topology.addBond(
+                        atoms_list[bond[0]],
+                        atoms_list[bond[1]],
+                        )
+
+        else: # similar workflow, but without the supercell generation
+            positions = self.system.pos / molmod.units.angstrom
+
+            # construct map of atom indices to residues
+            atom_index_mapping = {}
+            for template, residues in self.residues.items():
+                for i, residue in enumerate(residues):
+                    for j, atom in enumerate(residue):
+                        atom_index_mapping[atom] = (template, i, j)
+            included_atoms = list(atom_index_mapping.keys())
+            assert tuple(sorted(included_atoms)) == tuple(range(natoms))
+
+            def name_residue(template, residue_index):
+                """Defines the name of a specific residue"""
+                return 'T' + str(template) + '_R' + str(i)
+
+            atoms_list = [] # necessary for adding bonds to topology
+
+            # initialize residues and track them in a dict
+            current_residues = {}
+            for template, residues in self.residues.items():
+                for i, residue in enumerate(residues):
+                    name = name_residue(template, i)
+                    residue = topology.addResidue(
+                            name=name,
+                            chain=chain,
+                            id=name,
+                            )
+                    current_residues[(template, i)] = residue
+
+            # add atoms to corresponding residue in topology (in their
+            # original order)
+            for j in range(natoms):
+                key = atom_index_mapping[j]
+                template = key[0]
+                residue_index = key[1]
+                atom_index = key[2]
+                e = mm.app.Element.getByAtomicNumber(self.system.numbers[j])
+                atom_name = 'giggle'
+                atom = topology.addAtom(
+                        name=atom_name,
+                        element=e,
+                        residue=current_residues[(template, residue_index)]
+                        )
+                atoms_list.append(atom)
+
+            # add bonds from system object
+            for bond in self.system.bonds:
+                topology.addBond(
+                        atoms_list[bond[0]],
+                        atoms_list[bond[1]],
+                        )
+        return topology, positions
+
+    def define_templates(self):
+        """Defines residue templates for this system based on its topology
+
+        If an initial partitioning of the system into residues is available
+        (as a topology object in self.topology), then
+        this function first matches the given residues to the system and
+        verifies that each atom is assigned to a residue. If no initial residue
+        partitioning is given, then a suitable choice of residues is inferred
+        based on the connectivity and periodicity of the system.
+        Once residues are defined, they are used to construct templates based
+        on the atom types as defined in the yaff System object.
+
+        """
+        graph = nx.Graph() # graph of entire system
+        for i in range(self.system.natom):
+            graph.add_node(i, kind=self.system.numbers[i])
+        for bond in self.system.bonds:
+            graph.add_edge(bond[0], bond[1])
+
+        if self.topology is None:
+            # infer residues from bond connectivity and periodicity
+            # for framework materials (whose 'molecular' graph is periodic),
+            # it is necessary to remove the bonds from system which cross the
+            # unit cell boundaries.
+            #
+            # 1. (if periodic) wrap positions into current box
+            # 2. separate system into connected graphs
+            # for each connected graph:
+            # 3. (if periodic) identify and remove cross-unit-cell bonds
+            # 4. create residue based on remaining bonds
+
+            if self.box is not None:
+                positions = self.system.pos / molmod.units.angstrom
+                wrap_coordinates(positions, self.box, rectangular=False)
+
+            components = [graph.subgraph(c).copy() for c in nx.algorithms.connected_components(graph)]
+            logger.debug('found {} connected components'.format(len(components)))
+            thres = 4.0 # maximum distance of covalent bond 
+            if self.box is not None:
+                for i in range(len(components)):
+                    indices = np.array(components[i].edges())
+                    lengths = np.linalg.norm(
+                            positions[indices[:, 1], :] - positions[indices[:, 0], :],
+                            axis=1,
+                            ) # find external bonds using nonperiodic distances
+                    external = lengths > thres
+                    # copy component, remove edges, and check connectivity
+                    tmp = components[i].copy()
+                    for j in range(len(external)):
+                        if external[j]: # remove this edge
+                            tmp.remove_edge(indices[j, 0], indices[j, 1])
+                    if nx.is_connected(tmp):
+                        # if a component remains connected after removing
+                        # 'external' edges, it should be modified.
+                        components[i] = tmp
+                    else:
+                        # if a component becomes disconnected after removing
+                        # 'external' edges, it does not require modifications
+                        pass
+            else:
+                # no need to do anything for nonperiodic system
+                pass
+        else:
+            # construct components from residues defined in topology
+            components = []
+            for i, residue in enumerate(self.topology.residues()):
+                index_set = set()
+                for atom in residue.atoms():
+                    index_set.add(atom.index)
+                components.append(graph.subgraph(index_set))
+
+        # fill residues dict
+        residues = {} # maps template index to list of residues
+        i = 0
+        while i < len(components):
+            residues[i] = [tuple(components[i].nodes())]
+            j = i + 1
+            while j < len(components): # loop over remaining components
+                match = nx.is_isomorphic(
+                        components[i],
+                        components[j],
+                        node_match=lambda x, y: x['kind'] == y['kind'],
+                        )
+                if match:
+                    residues[i].append(tuple(components[j].nodes()))
+                    components.pop(j)
+                else:
+                    j += 1
+            i += 1
+
+        # only unique components are retained; these are the templates
+        templates = components
+        logger.debug('found {} templates:'.format(len(templates)))
+        for index, residue_list in residues.items():
+            logger.debug('\t{} residues from template {}'.format(
+                len(residue_list),
+                index,
+                ))
+
+        # add force field atom types to templates
+        types = [self.system.ffatypes[i] for i in self.system.ffatype_ids]
+        types_dict = {i: {'atom_type': types[i]} for i in range(self.system.natom)}
+        for template in templates:
+            nx.set_node_attributes(template, types_dict)
+        return templates, residues
 
     def determine_supercell(self):
         """Determines supercell of the system"""
@@ -347,33 +615,46 @@ class Configuration:
         return final
 
     @staticmethod
-    def from_files(path_system, path_pars, path_config=None):
+    def from_files(chk=None, txt=None, pdb=None, yml=None):
         """Constructs a Configuration based on system and parameter files
 
-        If, optionally, a config .yml file is specified, than the settings in
+        If, optionally, a config .yml file is specified, then the settings in
         that file are verified and loaded into the newly created object
 
         Parameters
         ----------
 
-        path_system : pathlib.Path
+        chk : pathlib.Path
             specifies the location of the YAFF .chk file
 
-        path_pars : pathlib.Path
+        txt : pathlib.Path
             specifies the location of the force field parameters .txt file
 
-        path_config : pathlib.Path, optional
-            specifies the location of the .yml configuration file
+        pdb : pathlib.Path, optional
+            specifies the location of an OpenMM Topology .pdb file used to
+            define residues within the system.
+
+        yml : pathlib.Path, optional
+            specifies the location of an existing .yml configuration file. If
+            not specified, the default settings for the current system are used.
 
         """
-        # load system and generate generic force field
-        system = yaff.System.from_file(str(path_system))
-        with open(path_pars, 'r') as f:
-            pars = f.read()
-        configuration = Configuration(system, pars)
+        # pdb and yml are optional
+        assert chk is not None
+        assert txt is not None
 
-        if path_config: # loads .yml contents and calls update_properties()
-            with open(path_config, 'r') as f:
+        # load yaff System object; load pars as string; load residues in pdb
+        system = yaff.System.from_file(str(chk))
+        with open(txt, 'r') as f:
+            pars = f.read()
+        if pdb is not None:
+            topology = mm.app.PDBFile(str(pdb)).getTopology()
+        else:
+            topology = None
+        configuration = Configuration(system, pars, topology)
+
+        if yml is not None: # loads existing config
+            with open(yml, 'r') as f:
                 config = yaml.load(f, Loader=yaml.FullLoader)
             configuration.update_properties(config)
         return configuration

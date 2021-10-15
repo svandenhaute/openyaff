@@ -303,6 +303,19 @@ def wrap_coordinates(positions, rvecs, rectangular=False):
         positions[:] = np.dot(frac, rvecs)
 
 
+def compute_lengths(indices, positions, box=None):
+    deltas = positions[indices[:, 1], :] - positions[indices[:, 0], :]
+    if box is not None: # apply mic
+        nintc = np.round(deltas[:, 2] / box[2, 2]).reshape(-1, 1)
+        nintb = np.round(deltas[:, 1] / box[1, 1]).reshape(-1, 1)
+        ninta = np.round(deltas[:, 0] / box[0, 0]).reshape(-1, 1)
+
+        deltas -= box[2, :].reshape(1, -1) * nintc
+        deltas -= box[1, :].reshape(1, -1) * nintb
+        deltas -= box[0, :].reshape(1, -1) * ninta
+    return np.linalg.norm(deltas, axis=1)
+
+
 def yaff_generate(seed):
     """Generates a yaff.ForceField instance based on a seed
 
@@ -510,13 +523,6 @@ def get_scale_index(definition):
             scale_index += 1
     assert scale_index <= 3
     return scale_index
-
-
-def generate_residues(bonds, positions, box=None):
-    """Partitions the system into residues
-
-    """
-    pass
 
 
 class Colors:

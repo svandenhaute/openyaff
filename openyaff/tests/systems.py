@@ -2,6 +2,8 @@ import molmod
 import yaff
 import tempfile
 import numpy as np
+import simtk.openmm as mm
+import simtk.openmm.app
 from pathlib import Path
 
 
@@ -62,6 +64,16 @@ def lennardjones(natoms=40, volume=1000):
     # ---------------------------------------------
 
     LJ:PARS      C     2.360   0.116      0"""
+    return system, pars
+
+
+def methane(return_forcefield=False):
+    """Generate box of methane molecules from YAFF input files"""
+    path_system = str(here / 'methane' / 'system.chk')
+    path_pars = str(here / 'methane' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    with open(path_pars, 'r') as f:
+        pars = f.read()
     return system, pars
 
 
@@ -134,6 +146,16 @@ def alanine(return_forcefield=False):
     return system, pars
 
 
+def polymer():
+    path_system = str(here / 'polymer' / 'system.chk')
+    path_pars = str(here / 'polymer' / 'pars.txt')
+    system = yaff.System.from_file(path_system)
+    with open(path_pars, 'r') as f:
+        pars = f.read()
+    pdb = mm.app.PDBFile(str(here / 'polymer' / 'topology.pdb'))
+    return (system, pdb.getTopology()), pars
+
+
 def get_system(name, return_forcefield=False, **kwargs):
     if name == 'lennardjones':
         system, pars = lennardjones(**kwargs)
@@ -151,6 +173,10 @@ def get_system(name, return_forcefield=False, **kwargs):
         system, pars = uio66(**kwargs)
     elif name == 'alanine':
         system, pars = alanine(**kwargs)
+    elif name == 'methane':
+        system, pars = methane(**kwargs)
+    elif name == 'polymer':
+        system, pars = polymer(**kwargs) # system -> (system, topology)
     else:
         raise NotImplementedError
 

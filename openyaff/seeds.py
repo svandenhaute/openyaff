@@ -42,20 +42,21 @@ class YaffSeed:
 
     def save_topology(self, path_pdb=None):
         """Saves topology of YAFF system and its positions/box vectors"""
-        topology = create_openmm_topology(self.system)
-        if self.system.cell.nvec != 0: # check box vectors are included
-            assert topology.getPeriodicBoxVectors() is not None
-        if path_pdb is not None:
-            if path_pdb.exists():
-                path_pdb.unlink()
-            u = molmod.units.angstrom / unit.angstrom
-            mm.app.PDBFile.writeFile(
-                    topology,
-                    self.system.pos / u,
-                    open(path_pdb, 'w+'),
-                    keepIds=True,
-                    )
-        return topology
+        raise NotImplementedError
+        #topology = create_openmm_topology(self.system)
+        #if self.system.cell.nvec != 0: # check box vectors are included
+        #    assert topology.getPeriodicBoxVectors() is not None
+        #if path_pdb is not None:
+        #    if path_pdb.exists():
+        #        path_pdb.unlink()
+        #    u = molmod.units.angstrom / unit.angstrom
+        #    mm.app.PDBFile.writeFile(
+        #            topology,
+        #            self.system.pos / u,
+        #            open(path_pdb, 'w+'),
+        #            keepIds=True,
+        #            )
+        #return topology
 
 
 class OpenMMSeed:

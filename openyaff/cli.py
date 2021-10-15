@@ -22,86 +22,55 @@ yaff.log.set_level(yaff.log.silent)
 logger = logging.getLogger(__name__) # logging per module
 
 
-def get_input_files(path_dir, filetypes):
-    """Verifies the existence of precisely one .chk and .txt file and returns
-    their paths.
-
-    Parameters
-    ----------
-
-    path_dir : pathlib.Path
-        path of directory to search in
-
-    filetypes : list of str
-        extensions of files to look for, e.g. ['.chk', '.txt']
-
-    Returns
-    -------
-
-    path_list : list of pathlib.Path
-        list of output paths, of same length as filetypes
-
-    """
-    files = list(path_dir.iterdir())
-    suffixes = [file.suffix for file in files]
-    path_list = []
-    for filetype in filetypes:
-        assert filetype in suffixes # verify correct files are present
-        index = suffixes.index(filetype)
-        _ = suffixes.pop(index)
-        assert filetype not in suffixes # verify uniqueness
-        path_list.append(files.pop(index))
-    return path_list
-
-
-def test():
-    print('works!')
-
-
-def validate(cwd):
-    input_files = get_input_files(cwd, ['.chk', '.txt'])
-    path_yml = cwd / 'config.yml'
-    configuration = Configuration.from_files(*input_files, path_yml)
+def validate(cwd, input_files):
+    assert 'chk' in input_files
+    assert 'txt' in input_files
+    assert 'yml' in input_files
+    configuration = Configuration.from_files(**input_files)
     configuration.log_config()
-    conversion = load_conversion(path_yml)
-    validations = load_validations(path_yml)
+    conversion = load_conversion(input_files['yml'])
+    validations = load_validations(input_files['yml'])
     for validation in validations:
         validation.run(configuration, conversion)
 
 
-def convert(cwd, seed_kind, full, ludicrous):
-    input_files = get_input_files(cwd, ['.chk', '.txt'])
-    path_yml = cwd / 'config.yml'
-    configuration = Configuration.from_files(*input_files, path_yml)
+def convert(cwd, input_files, seed_kind, full):
+    assert 'chk' in input_files
+    assert 'txt' in input_files
+    assert 'yml' in input_files
+    configuration = Configuration.from_files(**input_files)
     configuration.log_config()
-    conversion = load_conversion(path_yml)
+    conversion = load_conversion(input_files['yml'])
 
     path_xml = cwd / 'system.xml'
     logger.info('saving OpenMM System object to ')
     logger.info(path_xml)
-    if not ludicrous:
-        openmm_seed = conversion.apply(configuration, seed_kind)
-    else:
-        logger.info('converting in ludicrous mode...')
-        assert seed_kind == 'all' # only useful situation to use ludicrous
-        openmm_seed = conversion.apply_ludicrous(configuration)
+    openmm_seed = conversion.apply(configuration, seed_kind)
     openmm_seed.serialize(path_xml)
 
     if full: # write additional files
-        seed = configuration.create_seed()
-        seed.save_topology(cwd / 'topology.pdb')
+        topology, positions = configuration.create_topology()
+        path_pdb = cwd / 'topology.pdb'
+        if path_pdb.exists():
+            path_pdb.unlink()
+        mm.app.PDBFile.writeFile(
+                topology,
+                positions * unit.anstrom,
+                open(path_pdb, 'w+'),
+                keepIds=True,
+                )
 
 
-def save(cwd, file_formats):
-    input_files = get_input_files(cwd, ['.chk', '.txt'])
-    path_yml = cwd / 'config.yml'
-    configuration = Configuration.from_files(*input_files, path_yml)
+def save(cwd, input_files, file_formats):
+    assert 'chk' in input_files
+    assert 'txt' in input_files
+    assert 'yml' in input_files
+    configuration = Configuration.from_files(**input_files)
 
-    logger.info('saving system with current supercell configuration in the'
-            ' following formats:')
+    logger.info('saving configured system in the following formats:')
     for file_format in file_formats:
         logger.info('\t\t' + file_format)
-    logger.info('cell vectors are stored in reduced form')
+    logger.info('If the system is periodic, its box vectors are stored in reduced form')
     seed = configuration.create_seed()
     for file_format in file_formats:
         path_file = cwd / ('configured_system.' + file_format)
@@ -110,19 +79,22 @@ def save(cwd, file_formats):
         if (file_format == 'xyz') or (file_format == 'h5'):
             seed.system.to_file(str(path_file))
         elif file_format == 'pdb':
-            seed.save_topology(cwd / 'topology.pdb')
+            topology, positions = configuration.create_topology()
+            path_pdb = cwd / 'topology.pdb'
+            if path_pdb.exists():
+                path_pdb.unlink()
+            mm.app.PDBFile.writeFile(
+                    topology,
+                    positions * unit.anstrom,
+                    open(path_pdb, 'w+'),
+                    keepIds=True,
+                    )
 
 
-def initialize(cwd):
-    input_files = get_input_files(cwd, ['.chk', '.txt'])
+def initialize(cwd, input_files):
+    assert 'chk' in input_files
+    assert 'txt' in input_files
     path_yml = cwd / 'config.yml'
-    path_xyz = cwd / 'configured_system.xyz'
-    path_h5 = cwd / 'configured_system.h5'
-    logger.info('found the following input files:')
-    for file in input_files:
-        logger.info(str(file.name))
-    logger.info('')
-
     if path_yml.exists(): # remove file if it exists
         path_yml.unlink()
     default_classes = [ # classes for which to initialize .yml keywords
@@ -131,10 +103,8 @@ def initialize(cwd):
             StressValidation,
             ]
 
-    # initialize Configuration based on defaults
-    configuration = Configuration.from_files(*input_files)
-    # check if rcut should be determined 
-    nonbonded_prefixes = configuration.get_prefixes('nonbonded')
+    # initialize Configuration based on defaults; log
+    configuration = Configuration.from_files(**input_files)
     configuration.log_system()
     configuration.log_config()
     logger.info('writing configuration file to')
@@ -144,7 +114,7 @@ def initialize(cwd):
         default().write(path_yml)
 
     # add annotations to config file for clarity; this cannot be done using
-    # pyyaml and hence proceeds manually
+    # pyyaml and therefore proceeds manually
     add_header_to_config(path_yml)
     configuration.annotate(path_yml)
     for default in default_classes:
@@ -160,8 +130,7 @@ def main():
     parser.add_argument(
             'mode',
             action='store',
-            choices=['test', 'initialize', 'save', 'convert', 'validate'],
-            default='test',
+            choices=['initialize', 'save', 'convert', 'validate'],
             help='specifies mode of operation',
             )
     parser.add_argument(
@@ -205,12 +174,11 @@ def main():
             help='write topology and state files necessary to run simulations',
             )
     parser.add_argument(
-            '-l',
-            '--ludicrous',
-            action='store_true',
-            default=False,
-            help=('enable ludicrous mode. This is strongly recommended for'
-                 ' systems containing over one million atoms'),
+            'input_files',
+            type=argparse.FileType('r'),
+            nargs='+',
+            action='store',
+            help='input files to consider',
             )
     args = parser.parse_args()
 
@@ -221,11 +189,19 @@ def main():
     else:
         logging.basicConfig(level=logging.INFO, format=logging_format)
 
+    # organize input files per extension
+    input_files = {}
+    for file in args.input_files:
+        path = Path(file.name)
+        input_files[path.suffix[1:]] = path # remove initial point from ext
+    logger.info('using the following input files:')
+    for file in input_files.values():
+        logger.info(str(file.name))
+    logger.info('')
+
     cwd = Path.cwd()
-    if args.mode == 'test':
-        test()
-    elif args.mode == 'initialize':
-        initialize(cwd)
+    if args.mode == 'initialize':
+        initialize(cwd, input_files)
     elif args.mode == 'save':
         file_formats = []
         if args.xyz:
@@ -234,18 +210,18 @@ def main():
             file_formats.append('h5')
         if args.pdb:
             file_formats.append('pdb')
-        save(cwd, file_formats)
+        save(cwd, input_files, file_formats)
     elif args.mode == 'convert':
         seed_kind = args.interaction
         assert seed_kind in ['all', 'covalent', 'dispersion', 'electrostatic']
         convert(
                 cwd,
+                input_files=input_files,
                 seed_kind=seed_kind,
                 full=args.full,
-                ludicrous=args.ludicrous,
                 )
         pass
     elif args.mode == 'validate':
-        validate(cwd)
+        validate(cwd, input_files)
     else:
         raise NotImplementedError
