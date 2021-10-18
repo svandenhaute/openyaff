@@ -1,9 +1,11 @@
 import molmod
+import tempfile
 import logging
 import simtk.openmm as mm
 import simtk.openmm.app
 import simtk.unit as unit
 from lxml import etree
+import xml.etree.ElementTree as ET
 
 from openyaff.utils import create_openmm_topology
 
@@ -137,3 +139,46 @@ class OpenMMSeed:
             system = mm.XmlSerializer.deserialize(xml)
             assert isinstance(system, mm.System)
             return system
+
+    @classmethod
+    def from_forcefield(cls, forcefield, configuration):
+        """Constructs an OpenMM System object from a force field"""
+        topology, _ = configuration.create_topology()
+
+        # get kwargs for createSystem from configuration
+        if configuration.box is not None:
+            nonbondedMethod = mm.app.PME # cannot use integers
+            nonbondedCutoff = configuration.rcut * unit.angstrom
+            switchDistance  = configuration.switch_width * unit.angstrom
+        else:
+            nonbondedMethod = mm.app.NoCutoff
+            nonbondedCutoff = None
+            switchDistance  = None
+
+        #ET.indent(forcefield)
+        #pars = ET.tostring(forcefield.getroot(), encoding='unicode')
+        #print(pars)
+
+        # create temporary xml file and generate force field object
+        with tempfile.NamedTemporaryFile(delete=False, mode='w') as tf:
+            forcefield.write(tf, encoding='unicode')
+        tf.close()
+
+        ff = mm.app.ForceField(tf.name)
+        ff.getMatchingTemplates(topology, ignoreExternalBonds=True)
+        if configuration.box is None:
+            dummy_cutoff = 1234
+        else:
+            dummy_cutoff = configuration.rcut
+        system = ff.createSystem(
+                topology,
+                #nonbondedMethod=nonbondedMethod,
+                nonbondedCutoff=dummy_cutoff, # random value
+                ignoreExternalBonds=True,
+                removeCMMotion=False,
+                #switchDistance=switchDistance,
+                )
+
+        with open('generated_system.xml', 'w+') as f:
+            f.write(mm.XmlSerializer.serialize(system))
+        return cls(system)

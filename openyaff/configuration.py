@@ -234,7 +234,7 @@ class Configuration:
 
             def name_residue(image, template, residue_index):
                 """Defines the name of a specific residue"""
-                return 'CELL' + str(image) + '_T' + str(template) + '_R' + str(i)
+                return str(image) + '_' + str(template) + '_' + str(i)
 
             atoms_list = [] # necessary for adding bonds to topology
             for image, index in enumerate(np.ndindex(tuple(supercell))):
@@ -259,7 +259,7 @@ class Configuration:
                     residue_index = key[1]
                     atom_index = key[2]
                     e = mm.app.Element.getByAtomicNumber(self.system.numbers[j])
-                    atom_name = 'giggle'
+                    atom_name = 'A' + str(j)
                     atom = topology.addAtom(
                             name=atom_name,
                             element=e,
@@ -303,7 +303,7 @@ class Configuration:
 
             def name_residue(template, residue_index):
                 """Defines the name of a specific residue"""
-                return 'T' + str(template) + '_R' + str(i)
+                return str(template) + '_' + str(residue_index)
 
             atoms_list = [] # necessary for adding bonds to topology
 
@@ -313,9 +313,9 @@ class Configuration:
                 for i, residue in enumerate(residues):
                     name = name_residue(template, i)
                     residue = topology.addResidue(
-                            name=name,
+                            name='r' + str(i),
                             chain=chain,
-                            id=name,
+                            #id='r' + str(i),
                             )
                     current_residues[(template, i)] = residue
 
@@ -327,7 +327,7 @@ class Configuration:
                 residue_index = key[1]
                 atom_index = key[2]
                 e = mm.app.Element.getByAtomicNumber(self.system.numbers[j])
-                atom_name = 'giggle'
+                atom_name = 'a' + str(j)
                 atom = topology.addAtom(
                         name=atom_name,
                         element=e,

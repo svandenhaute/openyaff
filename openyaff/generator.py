@@ -1,6 +1,7 @@
 import yaff
 import logging
 import numpy as np
+import xml.etree.ElementTree as ET
 import molmod
 import simtk.unit as unit
 import simtk.openmm as mm
@@ -92,6 +93,21 @@ class ValenceMirroredGenerator(yaff.ValenceGenerator):
     def add_term_to_force(self, force, pars, indexes):
         raise NotImplementedError
 
+    def parse_xml(self, system, section, ff_args, **kwargs):
+        self.check_suffixes(section)
+        conversions = self.process_units(section['UNIT'])
+        par_table = self.process_pars(section['PARS'], conversions, self.nffatype)
+        self.clean_par_table(par_table)
+        forces = self._internal_parse(par_table)
+        return forces
+
+    def clean_par_table(self, par_table):
+        # based on self.iter_equiv_keys_and_pars
+        raise NotImplementedError
+
+    def _internal_parse(self, par_table):
+        raise NotImplementedError
+
 
 class BondGenerator(ValenceMirroredGenerator):
     par_info = [('K', float), ('R0', float)]
@@ -105,6 +121,11 @@ class BondGenerator(ValenceMirroredGenerator):
 
     def iter_indexes(self, system):
         return system.iter_bonds()
+
+    def clean_par_table(self, par_table):
+        for key in list(par_table.keys()):
+            if key[::-1] in par_table:
+                par_table.pop(key)
 
 
 class BondHarmGenerator(BondGenerator):
@@ -129,6 +150,21 @@ class BondHarmGenerator(BondGenerator):
         K = pars[0] / conversion['K'] * conversion_mm['K']
         R0 = pars[1] / conversion['R0'] * conversion_mm['R0']
         force.addBond(int(indexes[0]), int(indexes[1]), R0, K)
+
+    def _internal_parse(self, par_table):
+        force_xml = ET.Element('HarmonicBondForce')
+        for bond, pars in par_table.items():
+            k      = pars[0][0]
+            length = pars[0][1]
+            attrib = {
+                    'type1' : bond[0],
+                    'type2' : bond[1],
+                    'length': str(length / molmod.units.nanometer),
+                    'k'     : str(k / molmod.units.kjmol * molmod.units.nanometer ** 2),
+                    }
+            e = ET.Element('Bond', attrib=attrib)
+            force_xml.append(e)
+        return [force_xml]
 
 
 class MM3QuarticGenerator(BondGenerator):
@@ -236,6 +272,9 @@ class BendGenerator(ValenceMirroredGenerator):
     def iter_indexes(self, system):
         return system.iter_angles()
 
+    def clean_par_table(self, par_table):
+        pass
+
 
 class BendAngleHarmGenerator(BendGenerator):
     par_info = [('K', float), ('THETA0', float)]
@@ -266,6 +305,22 @@ class BendAngleHarmGenerator(BendGenerator):
                 THETA0,
                 K,
                 )
+
+    def _internal_parse(self, par_table):
+        force_xml = ET.Element('HarmonicAngleForce')
+        for bend, pars in par_table.items():
+            k     = pars[0][0]
+            angle = pars[0][1]
+            attrib = {
+                    'type1' : bend[0],
+                    'type2' : bend[1],
+                    'type3' : bend[2],
+                    'angle': str(angle / molmod.units.rad),
+                    'k'     : str(k / molmod.units.kjmol * molmod.units.rad ** 2),
+                    }
+            e = ET.Element('Angle', attrib=attrib)
+            force_xml.append(e)
+        return [force_xml]
 
 
 class MM3BendGenerator(BendGenerator):
@@ -637,6 +692,34 @@ class TorsionGenerator(ValenceMirroredGenerator):
                 int(indexes[3]),
                 [M, A, PHI0],
                 )
+
+    def clean_par_table(self, par_table):
+        for key in list(par_table.keys()):
+            if key[::-1] in par_table:
+                par_table.pop(key)
+
+    def _internal_parse(self, par_table):
+        force_xml = ET.Element('PeriodicTorsionForce')
+        for tors, pars in par_table.items():
+            attrib = {
+                    'type1' : tors[0],
+                    'type2' : tors[1],
+                    'type3' : tors[2],
+                    'type4' : tors[3],
+                    }
+            for i, pars_ in enumerate(pars):
+                M    = pars_[0]
+                A    = pars_[1]
+                PHI  = pars_[2]
+                periodicity = M
+                k = A / 2
+                phase = np.pi + M * PHI
+                attrib['periodicity' + str(i + 1)] = str(periodicity)
+                attrib['k' + str(i + 1)] = str(k / molmod.units.kjmol)
+                attrib['phase' + str(i + 1)] = str(phase / molmod.units.rad)
+            e = ET.Element('Proper', attrib=attrib)
+            force_xml.append(e)
+        return [force_xml]
 
 
 class TorsionPolySixGenerator(TorsionGenerator):
@@ -1828,7 +1911,7 @@ class FixedChargeGenerator(yaff.NonbondedGenerator):
         return bonded
 
 
-def apply_generators_mm(yaff_seed, system_mm, **kwargs):
+def apply_generators_to_system(yaff_seed, system_mm, **kwargs):
     """Adds forces to an OpenMM system object based on a YAFF seed
 
     Parameters
@@ -1839,7 +1922,8 @@ def apply_generators_mm(yaff_seed, system_mm, **kwargs):
 
     system_mm : mm.System
         OpenMM System object. It is assumed that this object does not contain
-        any forces when this function is called.
+        any forces when this function is called. Each generator will add one or
+        more forces to this object.
 
     """
     system = yaff_seed.system
@@ -1874,6 +1958,108 @@ def apply_generators_mm(yaff_seed, system_mm, **kwargs):
             system_mm.addForce(force)
     return system_mm
 
+
+def apply_generators_to_xml(yaff_seed, forcefield, **kwargs):
+    """Constructs an OpenMM force field in .xml format
+
+    Parameters
+    ----------
+
+    yaff_seed : openyaff.YaffSeed
+        yaff seed for which to generate and add forces
+
+    forcefield : xml.etree.ElementTree.Element
+        Object used to represent the contents of the .xml file. The root
+        element 'ForceField' contains an element 'AtomTypes', an element
+        'Residues', and a variety of force elements.
+
+    """
+    system     = yaff_seed.system
+    #ff_args    = yaff_seed.ff_args
+    ff_args    = None
+    parameters = yaff_seed.parameters
+
+    generators = {}
+    for x in globals().values():
+        if isinstance(x, type) and issubclass(x, yaff.Generator) and x.prefix is not None:
+            generators[x.prefix] = x()
+
+    forces = []
+    for prefix, section in parameters.sections.items():
+        logger.debug('applying prefix {}'.format(prefix))
+        generator = generators.get(prefix)
+        if generator is None:
+            raise NotImplementedError('No implementation for prefix {}'.format(
+                prefix))
+        if prefix not in ['LJ', 'FIXQ']: # treated separately
+            forces += generator.parse_xml(system, section, ff_args, **kwargs)
+
+    # add nonbonded
+    prefixes_nb = [p for p in parameters.sections.keys() if p in ['LJ', 'FIXQ']]
+    particle_pars = {} # ffatype as key; (q, sigma, epsilon) as value
+    for atom_type in system.ffatypes:
+        particle_pars[atom_type] = [0.0, 4.0, 0.0] # safe initialization
+    for p in prefixes_nb:
+        section = parameters.sections[p]
+        if p == 'LJ': # parse LJ data using LJ generator
+            generator = yaff.pes.generator.LJGenerator()
+            generator.check_suffixes(section)
+            conversions = generator.process_units(section['UNIT'])
+            par_table = generator.process_pars(section['PARS'], conversions, 1)
+            scale_table = generator.process_scales(section['SCALE'])
+            for atom_type in system.ffatypes:
+                sigma, epsilon = par_table[(atom_type,)][0]
+                particle_pars[atom_type][1] = sigma
+                particle_pars[atom_type][2] = epsilon
+        elif p == 'FIXQ':
+            generator = yaff.pes.generator.FixedChargeGenerator()
+            generator.check_suffixes(section)
+            conversions = generator.process_units(section['UNIT'])
+            atom_table = generator.process_atoms(section['ATOM'], conversions)
+            bond_table = generator.process_bonds(section['BOND'], conversions)
+            scale_table = generator.process_scales(section['SCALE'])
+
+            # first get regular charges
+            charges = np.zeros(len(system.ffatypes))
+            for i, atom_type in enumerate(system.ffatypes):
+                charge, radius = atom_table[atom_type]
+                assert radius == 0.0
+                charges[i] = charge
+
+            # apply bond charge increments
+            for bond_type, transfer in bond_table.items():
+                if transfer is None:
+                    continue
+                index0 = system.ffatypes.index(bond_type[0])
+                index1 = system.ffatypes.index(bond_type[1])
+                charges[index0] += transfer
+                charges[index1] -= transfer
+
+            for i, atom_type in enumerate(system.ffatypes):
+                particle_pars[atom_type][0] = charges[i]
+        else:
+            raise ValueError('Unexpected nonbonded prefix {}'.format(p))
+
+    attrib = {
+            'coulomb14scale': str(kwargs['scalings']['FIXQ'][3]),
+            'lj14scale': str(kwargs['scalings']['LJ'][3]),
+            'cutoff': str(kwargs['nonbondedCutoff'] / 10),
+            'useSwitchingFunction': str(kwargs['useSwitchingFunction']),
+            'useLongRangeCorrection': str(kwargs['useLongRangeCorrection']),
+            'nonbondedMethod': str(kwargs['nonbondedMethod']),
+            'switchingDistance': str(kwargs['switchingDistance'] / 10),
+            }
+    nbforce = ET.Element('NonbondedForce', attrib=attrib)
+    for atom_type in system.ffatypes:
+        attrib = {
+                'type': atom_type,
+                'charge': str(particle_pars[atom_type][0]),
+                'sigma': str(particle_pars[atom_type][1] / molmod.units.nanometer),
+                'epsilon': str(particle_pars[atom_type][2] / molmod.units.kjmol),
+                }
+        nbforce.append(ET.Element('Atom', attrib=attrib))
+    forces.append(nbforce)
+    return forces
 
 # determine supported covalent, dispersion and electrostatic prefixes
 COVALENT_PREFIXES      = []

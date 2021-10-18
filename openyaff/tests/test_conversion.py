@@ -7,7 +7,7 @@ import simtk.openmm as mm
 import simtk.openmm.app
 import simtk.unit as unit
 
-from openyaff import Configuration, ExplicitConversion, \
+from openyaff import Configuration, ExplicitConversion, ImplicitConversion, \
         OpenMMForceFieldWrapper, YaffForceFieldWrapper
 from openyaff.utils import reduce_box_vectors
 
@@ -131,47 +131,6 @@ def test_periodic():
                     assert_tol(forces, forces_mm, 10 * tol)
 
 
-@pytest.mark.skip(reason='removing ludicrous mode')
-def test_serialize_aggregate_nonperiodic(tmp_path):
-    system, pars = get_system('alanine')
-    configuration = Configuration(system, pars)
-    conversion = ExplicitConversion()
-    seed      = conversion.apply(configuration)
-    wrapper   = OpenMMForceFieldWrapper.from_seed(seed, 'Reference')
-    seed_l    = conversion.apply_ludicrous(configuration)
-    wrapper_l = OpenMMForceFieldWrapper.from_seed(seed_l, 'Reference')
-
-    positions = system.pos / molmod.units.angstrom
-    energy, forces = wrapper.evaluate(positions)
-    energy_l, forces_l = wrapper_l.evaluate(positions)
-    assert_tol(energy, energy_l, 1e-5)
-    assert_tol(forces, forces_l, 1e-5)
-
-
-@pytest.mark.skip(reason='removing ludicrous mode')
-def test_serialize_aggregate_nonperiodic(tmp_path):
-    system, pars = get_system('cau13')
-    configuration = Configuration(system, pars)
-    configuration.switch_width = 0.0 # disable switching
-    configuration.rcut = 10.0 # request cutoff of 10 angstorm
-    configuration.interaction_radius = 15.0
-    configuration.update_properties(configuration.write())
-    yaff_seed = configuration.create_seed('covalent')
-    positions = yaff_seed.system.pos / molmod.units.angstrom
-    rvecs = yaff_seed.system.cell._get_rvecs() / molmod.units.angstrom
-
-    conversion = ExplicitConversion()
-    seed      = conversion.apply(configuration)
-    wrapper   = OpenMMForceFieldWrapper.from_seed(seed, 'Reference')
-    seed_l    = conversion.apply_ludicrous(configuration)
-    wrapper_l = OpenMMForceFieldWrapper.from_seed(seed_l, 'Reference')
-
-    energy, forces = wrapper.evaluate(positions, rvecs)
-    energy_l, forces_l = wrapper_l.evaluate(positions, rvecs)
-    assert_tol(energy, energy_l, 1e-3)
-    assert_tol(forces, forces_l, 1e-3)
-
-
 def test_nonperiodic():
     systems    = ['alanine']
     platforms  = ['Reference']
@@ -270,3 +229,11 @@ def test_write_annotate(tmp_path):
   pme_error_thres: 1.0e-05
 """
     ExplicitConversion.annotate(path_config)
+
+
+def test_implicit_nonperiodic():
+    system, pars = get_system('alanine')
+    configuration = Configuration(system, pars)
+
+    conversion = ImplicitConversion()
+    seed_mm = conversion.apply(configuration, seed_kind='all')

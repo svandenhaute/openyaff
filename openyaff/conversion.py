@@ -1,11 +1,15 @@
 import yaml
-import logging
 import numpy as np
+import logging
+import xml.etree.ElementTree as ET
+import networkx as nx
 import simtk.openmm as mm
+import molmod
 
 from openyaff.utils import create_openmm_system, get_scale_index
 from openyaff.generator import COVALENT_PREFIXES, DISPERSION_PREFIXES, \
-        ELECTROSTATIC_PREFIXES, apply_generators_mm
+        ELECTROSTATIC_PREFIXES, apply_generators_to_system, \
+        apply_generators_to_xml
 from openyaff.seeds import OpenMMSeed
 
 
@@ -111,11 +115,10 @@ class Conversion:
             configuration for which to check compatibility
 
         """
-        _all = COVALENT_PREFIXES + DISPERSION_PREFIXES + ELECTROSTATIC_PREFIXES
-        # check available generators
-        for key, _ in configuration.parameters.sections.items():
-            assert key in _all, ('I do not have a generator '
-                    'for key {}'.format(key))
+        #_all = COVALENT_PREFIXES + DISPERSION_PREFIXES + ELECTROSTATIC_PREFIXES
+        #for key, _ in configuration.parameters.sections.items():
+        #    assert key in _all, ('I do not have a generator '
+        #            'for key {}'.format(key))
         nonbonded_prefixes = configuration.get_prefixes('nonbonded')
         for key, _ in configuration.parameters.sections.items():
             if key in nonbonded_prefixes: # can contain scalings
@@ -173,7 +176,7 @@ class Conversion:
         # the scaling index for both dispersion and electrostatics is returned
         exclusion_policy = 'regular'
         dispersion_scale_index = None
-        if len(dispersion) == 0: # no dispersion present, use normal policy
+        if len(dispersion) == 0: # no dispersion present, use regular policy
             pass
         elif len(dispersion) >= 1: # check for difference with electrostatic
             ref = None # verify all dispersion interactions have the same exclusions
@@ -182,7 +185,7 @@ class Conversion:
                         configuration.parameters.sections[prefix]['SCALE'],
                         )
                 if dispersion_scale_index is not None:
-                    assert (index_ == dispersion_scale_index)
+                    assert (dispersion_scale_index == index_)
                 else:
                     dispersion_scale_index = index_
             # iterate over present electrostatics and check if exclusions differ
@@ -222,7 +225,7 @@ class ExplicitConversion(Conversion):
         Begins with a call to check_compatibility, and an assertion error is
         raised if the configuration is not compatible.
         The system object in the yaff seed is used to create a corresponding
-        openmm system object, after which apply_generators_mm is called.
+        openmm system object, after which apply_generators_to_system is called.
 
         Parameters
         ----------
@@ -266,9 +269,141 @@ class ExplicitConversion(Conversion):
         kwargs['exclusion_policy'] = policy
         kwargs['dispersion_scale_index'] = dispersion_scale_index
 
-        apply_generators_mm(yaff_seed, system_mm, **kwargs)
+        apply_generators_to_system(yaff_seed, system_mm, **kwargs)
         openmm_seed = OpenMMSeed(system_mm)
         return openmm_seed
+
+
+class ImplicitConversion(Conversion):
+    """Converts a YAFF System and Parameters object into an OpenMM ForceField
+
+    This conversion is faster and therefore ideally suited for large systems.
+    Its functionality is somewhat restricted as compared to the
+    ExplicitConversion class.
+
+    """
+    kind = 'implicit'
+
+    def check_compatibility(self, configuration):
+        """Checks whether all parameter sections are supported
+
+        The implicit conversion scheme is less flexible in its support for
+        unconventional interactions: exotic cross terms or dispersion
+        interactions.
+
+        """
+        scalings = {}
+        nonbonded_prefixes = configuration.get_prefixes('nonbonded')
+        if len(nonbonded_prefixes) > 0:
+            for key in nonbonded_prefixes:
+                scalings[key] = {}
+                i = 1
+                for line in configuration.parameters.sections[key]['SCALE']:
+                    scale = float(line[1].split(' ')[-1])
+                    scalings[key][i] = scale
+                    i += 1
+
+            # if nonbonded_prefixes are (LJ and FIXQ):
+            #   allow noninteger scaling of 1-4 interaction
+            #   require that all other scalings are 0
+            # else:
+            #   require all scalings to be exactly the same
+            #   only a scale of 0 or 1 is allowed
+            if tuple(sorted(nonbonded_prefixes)) == ('FIXQ', 'LJ'):
+                assert scalings['FIXQ'][1] == 0.0
+                assert scalings['FIXQ'][2] == 0.0
+                assert scalings['FIXQ'][3] <= 1.0
+                assert scalings['LJ'][1] == 0.0
+                assert scalings['LJ'][2] == 0.0
+                assert scalings['LJ'][3] <= 1.0
+            else:
+                for i, key in enumerate(nonbonded_prefixes):
+                    if i == 0: # check whether scalings are 0 or 1
+                        for j in [1, 2, 3]:
+                            assert (scalings[key][j] == 0.0) or (scalings[key][j] == 1.0)
+                    else: # check whether scaling is equal to i == 0 scalin
+                        assert scalings[key][1] == scalings[nonbonded_prefixes[0]][1]
+                        assert scalings[key][2] == scalings[nonbonded_prefixes[0]][2]
+                        assert scalings[key][3] == scalings[nonbonded_prefixes[0]][3]
+        return scalings
+
+    def apply(self, configuration, seed_kind='all'):
+        """Generates force field XML tree"""
+        scalings = self.check_compatibility(configuration)
+
+        # initialize XML object
+        forcefield = ET.Element('ForceField')
+        sys = configuration.system
+        sys.set_standard_masses()
+
+        # add atom types
+        atom_types_xml = ET.Element('AtomTypes')
+        for i in range(len(sys.ffatypes)):
+            index = np.nonzero(sys.ffatype_ids == i)[0][0]
+            atom_type = sys.ffatypes[i]
+            mass      = sys.masses[index] / molmod.units.amu
+            element   = molmod.periodic.periodic[sys.numbers[index]].symbol
+            attrib = {
+                    'name': atom_type,
+                    'class': atom_type,
+                    'element': element,
+                    'mass': str(mass), # xml expects str, not float
+                    }
+            atom_types_xml.append(ET.Element('Type', attrib=attrib))
+        forcefield.append(atom_types_xml)
+
+        # add template definitions
+        def index_to_name(index):
+            return 'a' + str(index)
+        residues_xml = ET.Element('Residues')
+        for i, template in enumerate(configuration.templates):
+            residue_xml = ET.Element('Residue', {'name': 'T' + str(i)})
+            types = nx.get_node_attributes(template, 'atom_type')
+            for j, node in enumerate(template.nodes()):
+                atom_name = index_to_name(j)
+                atom_type = types[node]
+                e = ET.Element('Atom', {'name': atom_name, 'type': atom_type})
+                residue_xml.append(e)
+            for j, (atom0, atom1) in enumerate(template.edges()):
+                attrib = {
+                        'atomName1': index_to_name(atom0),
+                        'atomName2': index_to_name(atom1),
+                        }
+                e = ET.Element('Bond', attrib=attrib)
+                residue_xml.append(e)
+            residues_xml.append(residue_xml)
+        forcefield.append(residues_xml)
+
+        # get kwargs for apply_generators_to_xml from configuration
+        if configuration.box is not None:
+            nonbondedMethod = mm.app.PME # cannot use integers
+            nonbondedCutoff = configuration.rcut
+            useSwitchingFunction = (configuration.switch_width is not None)
+            switchingDistance = configuration.switch_width
+            useLongRangeCorrection = configuration.tailcorrections
+        else:
+            nonbondedMethod = mm.app.NoCutoff
+            nonbondedCutoff = 0.0
+            switchingDistance  = 0.0
+            useSwitchingFunction = 0
+            useLongRangeCorrection = 0
+
+        # generate yaff_seed and apply generators to the XML object
+        yaff_seed = configuration.create_seed(kind=seed_kind) # unnecessary?
+        forces = apply_generators_to_xml(
+                yaff_seed,
+                forcefield,
+                nonbondedMethod=nonbondedMethod,
+                nonbondedCutoff=nonbondedCutoff,
+                useSwitchingFunction=useSwitchingFunction,
+                switchingDistance=switchingDistance,
+                useLongRangeCorrection=useLongRangeCorrection,
+                scalings=scalings,
+                )
+        for force in forces:
+            forcefield.append(force)
+        forcefield = ET.ElementTree(element=forcefield) # convert to tree
+        return OpenMMSeed.from_forcefield(forcefield, configuration)
 
 
 def load_conversion(path_config):
