@@ -275,4 +275,4 @@ class OpenMMForceFieldWrapper(ForceFieldWrapper):
             OpenMM platform on which the computations should be performed.
 
         """
-        return cls(seed.get_system(), platform_name)
+        return cls(seed.system, platform_name)

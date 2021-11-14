@@ -6,6 +6,7 @@ import simtk.openmm as mm
 import simtk.unit as unit
 import simtk.openmm.app
 import numpy as np
+import xml.etree.ElementTree as ET
 
 from pathlib import Path
 
@@ -42,11 +43,22 @@ def convert(cwd, input_files, seed_kind, full):
     configuration.log_config()
     conversion = load_conversion(input_files['yml'])
 
-    path_xml = cwd / 'system.xml'
-    logger.info('saving OpenMM System object to ')
-    logger.info(path_xml)
-    openmm_seed = conversion.apply(configuration, seed_kind)
-    openmm_seed.serialize(path_xml)
+    if conversion.kind == 'explicit':
+        path_xml = cwd / 'system.xml'
+        logger.info('saving OpenMM System object to ')
+        logger.info(path_xml)
+        openmm_seed = conversion.apply(configuration, seed_kind)
+        openmm_seed.serialize_system(path_xml)
+    elif conversion.kind == 'implicit':
+        openmm_seed = conversion.apply(configuration, seed_kind)
+        path_xml = cwd / 'ff.xml'
+        logger.info('saving OpenMM ForceField object to ')
+        logger.info(path_xml)
+        openmm_seed.serialize_forcefield(path_xml)
+        path_xml = cwd / 'system.xml'
+        logger.info('saving OpenMM ForceField object to ')
+        logger.info(path_xml)
+        openmm_seed.serialize_system(path_xml)
 
     if full: # write additional files
         topology, positions = configuration.create_topology()

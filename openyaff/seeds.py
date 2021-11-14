@@ -38,6 +38,8 @@ class YaffSeed:
             interactions
 
         """
+        # in some cases, the ffatypes attribute is a numpy array 
+        system.ffatypes = list(system.ffatypes)
         self.system = system
         self.parameters = parameters
         self.ff_args = ff_args
@@ -73,112 +75,82 @@ class OpenMMSeed:
 
     """
 
-    def __init__(self, system, parts=None):
+    def __init__(self, system, forcefield_xml=None):
         """Constructor
 
         Parameters
         ----------
 
-        system : mm.System or None
+        system : mm.System
             contains the particle properties and all forces present in the
             system.
 
-        parts : list of mm.System or None
-            contains different system instances, where each item contains
-            different forces (all else being equal)
+        forcefield_xml : ET.ElementTree or None
+            XML representation of an OpenMM ForceField object
 
         """
         self.system = system
-        self.parts = parts
+        self.forcefield_xml = forcefield_xml
 
-    def serialize(self, path_xml=None):
-        if self.system is not None: # conventional serialization
-            xml = mm.XmlSerializer.serialize(self.system)
-            assert isinstance(xml, str), ('xml is of type {} but should be str,'
-                    ' try converting in ludicrous mode'.format(type(xml)))
-        else: # generate xml for each part and merge
-            assert self.parts is not None
-            tree_list = []
-            for part in self.parts:
-                tmp = mm.XmlSerializer.serialize(part)
-                assert isinstance(tmp, str), ('xml is of type {} but should '
-                        'be str; serialization failed.'.format(type(tmp)))
-                tree = etree.fromstring(tmp)
-                tree_list.append(tree)
-            # merge all forces into 
-            #base = tree_list[0]
-            #base_forces = None
-            #    for child in base:
-            #        if child.tag == 'Forces':
-            #            base_forces = child
-            forces = etree.Element('Forces')
-            for tree in tree_list:
-                for child in tree:
-                    if child.tag == 'Forces':
-                        for force in child: # iterate over all forces
-                            forces.insert(0, force)
-            base = tree_list[0]
-            for i, child in enumerate(base):
-                if child.tag == 'Forces':
-                    base[i] = forces # replace with total forces
-            xml_binary = etree.tostring(base)
-            xml = xml_binary.decode('utf-8')
+    def serialize_system(self, path_xml=None):
+        # save system
+        xml = mm.XmlSerializer.serialize(self.system)
+        assert isinstance(xml, str), ('xml is of type {} but should be str,'
+                ' try converting in ludicrous mode'.format(type(xml)))
+        with open(path_xml, 'w+') as f:
+            f.write(xml)
+        return xml
 
-        if path_xml is not None: # write xml
-            if path_xml.exists():
-                path_xml.unlink() # remove file if it exists
-            with open(path_xml, 'w') as f:
-                f.write(xml)
+    def serialize_forcefield(self, path_xml=None):
+        assert self.forcefield_xml is not None
+        with open(path_xml, 'w+') as f:
+            self.forcefield_xml.write(f, encoding='unicode')
+        with open(path_xml, 'r') as f:
+            xml = f.read()
         return xml
 
     def get_system(self):
-        if self.system is not None:
-            return self.system
-        else:
-            xml = self.serialize() # merges separate parts
-            system = mm.XmlSerializer.deserialize(xml)
-            assert isinstance(system, mm.System)
-            return system
+        return self.system
 
-    @classmethod
-    def from_forcefield(cls, forcefield, configuration):
-        """Constructs an OpenMM System object from a force field"""
-        topology, _ = configuration.create_topology()
+    #@classmethod
+    #def from_forcefield(cls, forcefield, configuration):
+    #    """Constructs an OpenMM System object from a force field"""
+    #    topology, _ = configuration.create_topology()
 
-        # get kwargs for createSystem from configuration
-        if configuration.box is not None:
-            nonbondedMethod = mm.app.PME # cannot use integers
-            nonbondedCutoff = configuration.rcut * unit.angstrom
-            switchDistance  = configuration.switch_width * unit.angstrom
-        else:
-            nonbondedMethod = mm.app.NoCutoff
-            nonbondedCutoff = None
-            switchDistance  = None
+    #    # get kwargs for createSystem from configuration
+    #    if configuration.box is not None:
+    #        nonbondedMethod = mm.app.PME # cannot use integers
+    #        nonbondedCutoff = configuration.rcut * unit.angstrom
+    #        switchDistance  = configuration.switch_width * unit.angstrom
+    #    else:
+    #        nonbondedMethod = mm.app.NoCutoff
+    #        nonbondedCutoff = None
+    #        switchDistance  = None
 
-        #ET.indent(forcefield)
-        #pars = ET.tostring(forcefield.getroot(), encoding='unicode')
-        #print(pars)
+    #    #ET.indent(forcefield)
+    #    #pars = ET.tostring(forcefield.getroot(), encoding='unicode')
+    #    #print(pars)
 
-        # create temporary xml file and generate force field object
-        with tempfile.NamedTemporaryFile(delete=False, mode='w') as tf:
-            forcefield.write(tf, encoding='unicode')
-        tf.close()
+    #    # create temporary xml file and generate force field object
+    #    with tempfile.NamedTemporaryFile(delete=False, mode='w') as tf:
+    #        forcefield.write(tf, encoding='unicode')
+    #    tf.close()
 
-        ff = mm.app.ForceField(tf.name)
-        ff.getMatchingTemplates(topology, ignoreExternalBonds=True)
-        if configuration.box is None:
-            dummy_cutoff = 1234
-        else:
-            dummy_cutoff = configuration.rcut
-        system = ff.createSystem(
-                topology,
-                #nonbondedMethod=nonbondedMethod,
-                nonbondedCutoff=dummy_cutoff, # random value
-                ignoreExternalBonds=True,
-                removeCMMotion=False,
-                #switchDistance=switchDistance,
-                )
+    #    ff = mm.app.ForceField(tf.name)
+    #    ff.getMatchingTemplates(topology, ignoreExternalBonds=True)
+    #    if configuration.box is None:
+    #        dummy_cutoff = 1e6
+    #    else:
+    #        dummy_cutoff = configuration.rcut
+    #    system = ff.createSystem(
+    #            topology,
+    #            #nonbondedMethod=nonbondedMethod,
+    #            nonbondedCutoff=dummy_cutoff, # random value
+    #            ignoreExternalBonds=True,
+    #            removeCMMotion=False,
+    #            #switchDistance=switchDistance,
+    #            )
 
-        with open('generated_system.xml', 'w+') as f:
-            f.write(mm.XmlSerializer.serialize(system))
-        return cls(system)
+    #    #with open('generated_system.xml', 'w+') as f:
+    #    #    f.write(mm.XmlSerializer.serialize(system))
+    #    return cls(system)

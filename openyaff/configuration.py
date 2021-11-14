@@ -5,6 +5,7 @@ import molmod
 import yaml
 import numpy as np
 import networkx as nx
+from copy import deepcopy
 from datetime import datetime
 
 import simtk.openmm as mm
@@ -184,7 +185,7 @@ class Configuration:
             rvecs = system.cell._get_rvecs().copy()
             transform_lower_triangular(system.pos, rvecs, reorder=True)
             reduce_box_vectors(rvecs)
-            wrap_coordinates(system.pos, rvecs)
+            #wrap_coordinates(system.pos, rvecs)
             system.cell.update_rvecs(rvecs)
         else:
             system = self.system
@@ -211,6 +212,18 @@ class Configuration:
 
     def create_topology(self):
         """Creates the topology for the current configuration"""
+        if self.topology is not None:
+            positions = self.system.pos / molmod.units.angstrom
+            if self.box is not None:
+                assert tuple(self.determine_supercell()) == (1, 1, 1)
+                box = self.box.copy()
+                transform_lower_triangular(positions, box, reorder=True)
+                reduce_box_vectors(box)
+                #wrap_coordinates(positions, box)
+                # copy topology
+                topology = deepcopy(self.topology)
+                topology.setPeriodicBoxVectors(box * unit.angstrom)
+            return self.topology, positions
         topology = mm.app.Topology()
         chain = topology.addChain()
 
@@ -252,20 +265,24 @@ class Configuration:
                         current_residues[(template, i)] = residue
 
                 # add atoms to corresponding residue in topology (in their
-                # original order)
+                # original order). Atoms are named with their element symbol
+                # as well as an index that starts counting at one
+                count = np.ones(118, dtype=np.int32) # counts elements
                 for j in range(natoms):
                     key = atom_index_mapping[j]
                     template = key[0]
                     residue_index = key[1]
                     atom_index = key[2]
-                    e = mm.app.Element.getByAtomicNumber(self.system.numbers[j])
-                    atom_name = 'A' + str(j)
+                    number = self.system.numbers[j]
+                    e = mm.app.Element.getByAtomicNumber(number)
+                    atom_name = e.symbol + str(count[number])
                     atom = topology.addAtom(
                             name=atom_name,
                             element=e,
                             residue=current_residues[(template, residue_index)]
                             )
                     atoms_list.append(atom)
+                    count[number] += 1
 
                 # generate positions for this image
                 image_pos = self.system.pos / molmod.units.angstrom
@@ -278,7 +295,7 @@ class Configuration:
             # apply cell reduction and wrap coordinates (similar to create_seed)
             transform_lower_triangular(positions, box, reorder=True)
             reduce_box_vectors(box)
-            wrap_coordinates(positions, box)
+            #wrap_coordinates(positions, box)
             topology.setPeriodicBoxVectors(box * unit.angstrom)
 
             # add bonds from supercell system object

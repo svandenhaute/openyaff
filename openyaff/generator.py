@@ -1081,12 +1081,12 @@ class CustomNonbondedForceGenerator:
             assert rcut > 1e3 # should be extremely large
             self.force.setNonbondedMethod(0)
 
-    def set_truncation(self, tr=None):
+    def set_truncation(self, ff_args):
         if self.periodic:
-            if tr is not None:
+            if ff_args.tr is not None:
                 self.force.setUseSwitchingFunction(True)
                 self.force.setSwitchingDistance(
-                        tr.width / molmod.units.nanometer * unit.nanometer,
+                        (ff_args.rcut - ff_args.tr.width) / molmod.units.nanometer * unit.nanometer,
                         )
             else:
                 self.force.setUseSwitchingFunction(False)
@@ -1221,7 +1221,7 @@ class MM3Generator(yaff.NonbondedGenerator):
 
         mmgen.add_particles(system, sigmas, epsilons)
         mmgen.set_rcut(ff_args.rcut)
-        mmgen.set_truncation(ff_args.tr)
+        mmgen.set_truncation(ff_args)
         mmgen.set_tailcorrections(ff_args.tailcorrections)
         mmgen.apply_exclusions(
                 system.natom,
@@ -1293,7 +1293,7 @@ class MM3CAPGenerator(yaff.NonbondedGenerator):
 
         mmgen.add_particles(system, sigmas, epsilons)
         mmgen.set_rcut(ff_args.rcut)
-        mmgen.set_truncation(ff_args.tr)
+        mmgen.set_truncation(ff_args)
         mmgen.set_tailcorrections(ff_args.tailcorrections)
         mmgen.apply_exclusions(
                 system.natom,
@@ -1362,7 +1362,7 @@ class LJGenerator(yaff.NonbondedGenerator):
 
         mmgen.add_particles(system, sigmas, epsilons)
         mmgen.set_rcut(ff_args.rcut)
-        mmgen.set_truncation(ff_args.tr)
+        mmgen.set_truncation(ff_args)
         mmgen.set_tailcorrections(ff_args.tailcorrections)
         mmgen.apply_exclusions(
                 system.natom,
@@ -1488,7 +1488,7 @@ class LJCrossGenerator(yaff.NonbondedGenerator):
 
         mmgen.add_particles(system)
         mmgen.set_rcut(ff_args.rcut)
-        mmgen.set_truncation(ff_args.tr)
+        mmgen.set_truncation(ff_args)
         mmgen.set_tailcorrections(ff_args.tailcorrections)
         mmgen.apply_exclusions(
                 system.natom,
@@ -2022,6 +2022,8 @@ def apply_generators_to_xml(yaff_seed, forcefield, **kwargs):
             # first get regular charges
             charges = np.zeros(len(system.ffatypes))
             for i, atom_type in enumerate(system.ffatypes):
+                if not (atom_type in atom_table.keys()):
+                    atom_table[atom_type] = (0.0, 0.0)
                 charge, radius = atom_table[atom_type]
                 assert radius == 0.0
                 charges[i] = charge
@@ -2048,6 +2050,7 @@ def apply_generators_to_xml(yaff_seed, forcefield, **kwargs):
             'useLongRangeCorrection': str(kwargs['useLongRangeCorrection']),
             'nonbondedMethod': str(kwargs['nonbondedMethod']),
             'switchingDistance': str(kwargs['switchingDistance'] / 10),
+            #'exceptionsUsePeriodic': str(0),
             }
     nbforce = ET.Element('NonbondedForce', attrib=attrib)
     for atom_type in system.ffatypes:
@@ -2060,6 +2063,7 @@ def apply_generators_to_xml(yaff_seed, forcefield, **kwargs):
         nbforce.append(ET.Element('Atom', attrib=attrib))
     forces.append(nbforce)
     return forces
+
 
 # determine supported covalent, dispersion and electrostatic prefixes
 COVALENT_PREFIXES      = []

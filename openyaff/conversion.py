@@ -4,7 +4,10 @@ import logging
 import xml.etree.ElementTree as ET
 import networkx as nx
 import simtk.openmm as mm
+import simtk.openmm.app
+import simtk.unit as unit
 import molmod
+import tempfile
 
 from openyaff.utils import create_openmm_system, get_scale_index
 from openyaff.generator import COVALENT_PREFIXES, DISPERSION_PREFIXES, \
@@ -352,22 +355,32 @@ class ImplicitConversion(Conversion):
             atom_types_xml.append(ET.Element('Type', attrib=attrib))
         forcefield.append(atom_types_xml)
 
+
         # add template definitions
-        def index_to_name(index):
-            return 'a' + str(index)
         residues_xml = ET.Element('Residues')
         for i, template in enumerate(configuration.templates):
             residue_xml = ET.Element('Residue', {'name': 'T' + str(i)})
             types = nx.get_node_attributes(template, 'atom_type')
+
+            # generate atom names within template
+            count = np.ones(118, dtype=np.int32)
+            index_to_name = {}
+            for node in template.nodes():
+                number = sys.numbers[node]
+                e = mm.app.Element.getByAtomicNumber(number)
+                atom_name = e.symbol + str(count[number])
+                index_to_name[node] = atom_name
+                count[number] += 1
+
             for j, node in enumerate(template.nodes()):
-                atom_name = index_to_name(j)
+                atom_name = index_to_name[node]
                 atom_type = types[node]
                 e = ET.Element('Atom', {'name': atom_name, 'type': atom_type})
                 residue_xml.append(e)
             for j, (atom0, atom1) in enumerate(template.edges()):
                 attrib = {
-                        'atomName1': index_to_name(atom0),
-                        'atomName2': index_to_name(atom1),
+                        'atomName1': index_to_name[atom0],
+                        'atomName2': index_to_name[atom1],
                         }
                 e = ET.Element('Bond', attrib=attrib)
                 residue_xml.append(e)
@@ -376,10 +389,10 @@ class ImplicitConversion(Conversion):
 
         # get kwargs for apply_generators_to_xml from configuration
         if configuration.box is not None:
-            nonbondedMethod = mm.app.PME # cannot use integers
+            nonbondedMethod = mm.app.PME
             nonbondedCutoff = configuration.rcut
             useSwitchingFunction = (configuration.switch_width is not None)
-            switchingDistance = configuration.switch_width
+            switchingDistance = configuration.rcut - configuration.switch_width
             useLongRangeCorrection = configuration.tailcorrections
         else:
             nonbondedMethod = mm.app.NoCutoff
@@ -403,7 +416,25 @@ class ImplicitConversion(Conversion):
         for force in forces:
             forcefield.append(force)
         forcefield = ET.ElementTree(element=forcefield) # convert to tree
-        return OpenMMSeed.from_forcefield(forcefield, configuration)
+        ET.indent(forcefield)
+        with tempfile.NamedTemporaryFile(delete=False, mode='w') as tf:
+            forcefield.write(tf, encoding='unicode')
+        tf.close()
+        #pars = ET.tostring(forcefield_xml.getroot(), encoding='unicode')
+        #print(pars)
+        ff = mm.app.ForceField(tf.name)
+
+        # create OpenMM system object
+        topology, _ = configuration.create_topology()
+        system = ff.createSystem(
+                topology,
+                nonbondedMethod=nonbondedMethod,
+                nonbondedCutoff=nonbondedCutoff / 10, # random value
+                ignoreExternalBonds=True,
+                removeCMMotion=False,
+                switchDistance=switchingDistance / 10,
+                )
+        return OpenMMSeed(system, forcefield)
 
 
 def load_conversion(path_config):
