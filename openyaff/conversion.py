@@ -466,8 +466,6 @@ class ImplicitConversion(Conversion):
                 removeCMMotion=False,
                 switchDistance=switchingDistance / 10,
                 )
-        for force in system.getForces():
-            print('number of bonds: {}'.format(force.getNumBonds()))
         if configuration.box is not None:
             # dirty fixes!
             dummy = mm.HarmonicBondForce()

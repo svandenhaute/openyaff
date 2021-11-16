@@ -464,6 +464,7 @@ class Configuration:
             i += 1
 
         # add external bonds to templates *AFTER* matching residues
+        # only unique components are retained; these are the templates
         count = Configuration.ext_node_count # make a copy
         templates = [c.copy() for c in components]
         for template in templates:
@@ -477,7 +478,6 @@ class Configuration:
                         template.add_edge(node, count)
                         count += 1
 
-        # only unique components are retained; these are the templates
         logger.debug('found {} templates:'.format(len(templates)))
         for index, residue_list in residues.items():
             logger.debug('\t{} residues from template {}'.format(
