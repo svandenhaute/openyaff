@@ -44,6 +44,11 @@ class Configuration:
             'ewald_alphascale',
             'ewald_gcutscale',
             ]
+    # to incorporate external bonds in templates, we add fake nodes and
+    # represent each external bond as an edge between a real node and a fake node;
+    # fake nodes have an index that starts at an extremely high number in order to
+    # separate them from real atoms
+    ext_node_count = int(1e12) # higher than any number of atoms
 
     def __init__(self, system, pars, topology=None):
         """Constructor
@@ -458,8 +463,21 @@ class Configuration:
                     j += 1
             i += 1
 
+        # add external bonds to templates *AFTER* matching residues
+        count = Configuration.ext_node_count # make a copy
+        templates = [c.copy() for c in components]
+        for template in templates:
+            for node in tuple(template.nodes()): # freeze list of current nodes
+                _all = list(graph.neighbors(node))
+                _int = list(template.neighbors(node))
+                assert len(_all) >= len(_int)
+                for neigh in _all:
+                    if neigh not in _int: # external bond; add edge
+                        template.add_node(count)
+                        template.add_edge(node, count)
+                        count += 1
+
         # only unique components are retained; these are the templates
-        templates = components
         logger.debug('found {} templates:'.format(len(templates)))
         for index, residue_list in residues.items():
             logger.debug('\t{} residues from template {}'.format(

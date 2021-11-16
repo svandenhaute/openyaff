@@ -366,40 +366,72 @@ class ImplicitConversion(Conversion):
             count = np.ones(118, dtype=np.int32)
             index_to_name = {}
             for node in template.nodes():
-                number = sys.numbers[node]
-                e = mm.app.Element.getByAtomicNumber(number)
-                atom_name = e.symbol + str(count[number])
-                index_to_name[node] = atom_name
-                count[number] += 1
+                if node < configuration.ext_node_count:
+                    number = sys.numbers[node]
+                    e = mm.app.Element.getByAtomicNumber(number)
+                    atom_name = e.symbol + str(count[number])
+                    index_to_name[node] = atom_name
+                    count[number] += 1
 
-            for j, node in enumerate(template.nodes()):
-                atom_name = index_to_name[node]
-                atom_type = types[node]
-                e = ET.Element('Atom', {'name': atom_name, 'type': atom_type})
-                residue_xml.append(e)
+            for node in template.nodes():
+                if node < configuration.ext_node_count:
+                    atom_name = index_to_name[node]
+                    atom_type = types[node]
+                    e = ET.Element('Atom', {'name': atom_name, 'type': atom_type})
+                    residue_xml.append(e)
             for j, (atom0, atom1) in enumerate(template.edges()):
-                attrib = {
-                        'atomName1': index_to_name[atom0],
-                        'atomName2': index_to_name[atom1],
-                        }
-                e = ET.Element('Bond', attrib=attrib)
-                residue_xml.append(e)
+                is_external0 = (atom0 >= configuration.ext_node_count)
+                is_external1 = (atom1 >= configuration.ext_node_count)
+                if (not is_external0) and (not is_external1):
+                    # this is a real bond
+                    attrib = {
+                            'atomName1': index_to_name[atom0],
+                            'atomName2': index_to_name[atom1],
+                            }
+                    e = ET.Element('Bond', attrib=attrib)
+                    residue_xml.append(e)
+                elif (is_external0 != is_external1):
+                    # this is an external bond
+                    if is_external0:
+                        atom = atom1
+                    else:
+                        atom = atom0
+                    attrib = {
+                            'atomName': index_to_name[atom],
+                            }
+                    e = ET.Element('ExternalBond', attrib=attrib)
+                    residue_xml.append(e)
+                else:
+                    raise ValueError('Encountered a bond between two external'
+                            ' nodes: {} and {}'.format(atom0, atom1))
+
             residues_xml.append(residue_xml)
         forcefield.append(residues_xml)
 
         # get kwargs for apply_generators_to_xml from configuration
-        if configuration.box is not None:
-            nonbondedMethod = mm.app.PME
-            nonbondedCutoff = configuration.rcut
-            useSwitchingFunction = (configuration.switch_width is not None)
-            switchingDistance = configuration.rcut - configuration.switch_width
-            useLongRangeCorrection = configuration.tailcorrections
-        else:
+        if len(configuration.get_prefixes('nonbonded')) > 0:
+            if configuration.box is not None:
+                nonbondedMethod = mm.app.PME
+                nonbondedCutoff = configuration.rcut
+                if configuration.switch_width is not None:
+                    useSwitchingFunction = True
+                    switchingDistance = configuration.rcut - configuration.switch_width
+                else:
+                    useSwitchingFunction = False
+                    switchingDistance = 0.0
+                useLongRangeCorrection = configuration.tailcorrections
+            else:
+                nonbondedMethod = mm.app.NoCutoff
+                nonbondedCutoff = 0.0
+                switchingDistance  = 0.0
+                useSwitchingFunction = 0
+                useLongRangeCorrection = 0
+        else: # set dummy values
             nonbondedMethod = mm.app.NoCutoff
             nonbondedCutoff = 0.0
-            switchingDistance  = 0.0
-            useSwitchingFunction = 0
-            useLongRangeCorrection = 0
+            useSwitchingFunction = False
+            switchingDistance = 0.0
+            useLongRangeCorrection=False
 
         # generate yaff_seed and apply generators to the XML object
         yaff_seed = configuration.create_seed(kind=seed_kind) # unnecessary?
@@ -420,7 +452,7 @@ class ImplicitConversion(Conversion):
         with tempfile.NamedTemporaryFile(delete=False, mode='w') as tf:
             forcefield.write(tf, encoding='unicode')
         tf.close()
-        #pars = ET.tostring(forcefield_xml.getroot(), encoding='unicode')
+        #pars = ET.tostring(forcefield.getroot(), encoding='unicode')
         #print(pars)
         ff = mm.app.ForceField(tf.name)
 
@@ -430,10 +462,23 @@ class ImplicitConversion(Conversion):
                 topology,
                 nonbondedMethod=nonbondedMethod,
                 nonbondedCutoff=nonbondedCutoff / 10, # random value
-                ignoreExternalBonds=True,
+                ignoreExternalBonds=False,
                 removeCMMotion=False,
                 switchDistance=switchingDistance / 10,
                 )
+        for force in system.getForces():
+            print('number of bonds: {}'.format(force.getNumBonds()))
+        if configuration.box is not None:
+            # dirty fixes!
+            dummy = mm.HarmonicBondForce()
+            dummy.setUsesPeriodicBoundaryConditions(True)
+            system.addForce(dummy) # add empty force to define periodicity
+            for force in system.getForces():
+                try:
+                    force.setUsesPeriodicBoundaryConditions(True)
+                    logger.critical('force {} set to use PBCs'.format(force))
+                except:
+                    continue
         return OpenMMSeed(system, forcefield)
 
 

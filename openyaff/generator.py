@@ -124,7 +124,7 @@ class BondGenerator(ValenceMirroredGenerator):
 
     def clean_par_table(self, par_table):
         for key in list(par_table.keys()):
-            if key[::-1] in par_table:
+            if (key[::-1] != key) and (key[::-1] in par_table):
                 par_table.pop(key)
 
 
@@ -152,7 +152,10 @@ class BondHarmGenerator(BondGenerator):
         force.addBond(int(indexes[0]), int(indexes[1]), R0, K)
 
     def _internal_parse(self, par_table):
-        force_xml = ET.Element('HarmonicBondForce')
+        attrib = {
+                'usesPeriodic': str(1),
+                }
+        force_xml = ET.Element('HarmonicBondForce', attrib=attrib)
         for bond, pars in par_table.items():
             k      = pars[0][0]
             length = pars[0][1]
@@ -307,7 +310,10 @@ class BendAngleHarmGenerator(BendGenerator):
                 )
 
     def _internal_parse(self, par_table):
-        force_xml = ET.Element('HarmonicAngleForce')
+        attrib = {
+                'usesPeriodic': str(1),
+                }
+        force_xml = ET.Element('HarmonicAngleForce', attrib=attrib)
         for bend, pars in par_table.items():
             k     = pars[0][0]
             angle = pars[0][1]
@@ -695,11 +701,14 @@ class TorsionGenerator(ValenceMirroredGenerator):
 
     def clean_par_table(self, par_table):
         for key in list(par_table.keys()):
-            if key[::-1] in par_table:
+            if (key[::-1] != key) and (key[::-1] in par_table):
                 par_table.pop(key)
 
     def _internal_parse(self, par_table):
-        force_xml = ET.Element('PeriodicTorsionForce')
+        attrib = {
+                'usesPeriodic': str(1),
+                }
+        force_xml = ET.Element('PeriodicTorsionForce', attrib=attrib)
         for tors, pars in par_table.items():
             attrib = {
                     'type1' : tors[0],
@@ -2042,26 +2051,27 @@ def apply_generators_to_xml(yaff_seed, forcefield, **kwargs):
         else:
             raise ValueError('Unexpected nonbonded prefix {}'.format(p))
 
-    attrib = {
-            'coulomb14scale': str(kwargs['scalings']['FIXQ'][3]),
-            'lj14scale': str(kwargs['scalings']['LJ'][3]),
-            'cutoff': str(kwargs['nonbondedCutoff'] / 10),
-            'useSwitchingFunction': str(kwargs['useSwitchingFunction']),
-            'useLongRangeCorrection': str(kwargs['useLongRangeCorrection']),
-            'nonbondedMethod': str(kwargs['nonbondedMethod']),
-            'switchingDistance': str(kwargs['switchingDistance'] / 10),
-            #'exceptionsUsePeriodic': str(0),
-            }
-    nbforce = ET.Element('NonbondedForce', attrib=attrib)
-    for atom_type in system.ffatypes:
+    if len(prefixes_nb) > 0:
         attrib = {
-                'type': atom_type,
-                'charge': str(particle_pars[atom_type][0]),
-                'sigma': str(particle_pars[atom_type][1] / molmod.units.nanometer),
-                'epsilon': str(particle_pars[atom_type][2] / molmod.units.kjmol),
+                'coulomb14scale': str(kwargs['scalings']['FIXQ'][3]),
+                'lj14scale': str(kwargs['scalings']['LJ'][3]),
+                'cutoff': str(kwargs['nonbondedCutoff'] / 10),
+                'useSwitchingFunction': str(kwargs['useSwitchingFunction']),
+                'useLongRangeCorrection': str(kwargs['useLongRangeCorrection']),
+                'nonbondedMethod': str(kwargs['nonbondedMethod']),
+                'switchingDistance': str(kwargs['switchingDistance'] / 10),
+                #'exceptionsUsePeriodic': str(0),
                 }
-        nbforce.append(ET.Element('Atom', attrib=attrib))
-    forces.append(nbforce)
+        nbforce = ET.Element('NonbondedForce', attrib=attrib)
+        for atom_type in system.ffatypes:
+            attrib = {
+                    'type': atom_type,
+                    'charge': str(particle_pars[atom_type][0]),
+                    'sigma': str(particle_pars[atom_type][1] / molmod.units.nanometer),
+                    'epsilon': str(particle_pars[atom_type][2] / molmod.units.kjmol),
+                    }
+            nbforce.append(ET.Element('Atom', attrib=attrib))
+        forces.append(nbforce)
     return forces
 
 
