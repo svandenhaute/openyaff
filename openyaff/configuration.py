@@ -252,7 +252,7 @@ class Configuration:
 
             def name_residue(image, template, residue_index):
                 """Defines the name of a specific residue"""
-                return str(image) + '_' + str(template) + '_' + str(i)
+                return str(image) + '_' + str(template) + '_' + str(residue_index)
 
             atoms_list = [] # necessary for adding bonds to topology
             for image, index in enumerate(np.ndindex(tuple(supercell))):
