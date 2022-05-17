@@ -1859,7 +1859,7 @@ class FixedChargeGenerator(yaff.NonbondedGenerator):
             if nonbonded is not None:
                 nonbonded.addException(
                         *exclusion,
-                        0 * unit.coulomb,
+                        0 * unit.coulomb * unit.coulomb, # product of charges
                         0 * unit.nanometer,
                         0 * unit.kilocalories_per_mole,
                         )

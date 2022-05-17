@@ -25,7 +25,7 @@ def test_short_simulation(tmp_path):
     for name in platforms:
         integrator = mm.LangevinMiddleIntegrator(
                 300 * unit.kelvin, # temperature
-                0.1 * unit.picosecond, # friction coefficient
+                0.1 / unit.picosecond, # friction coefficient
                 0.5 * unit.femtosecond, # step size
                 )
         try:
